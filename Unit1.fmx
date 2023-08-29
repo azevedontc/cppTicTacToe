@@ -83,18 +83,18 @@ object Form1: TForm1
   object Label1: TLabel
     StyledSettings = [Family, Style]
     Position.X = 48.000000000000000000
-    Position.Y = 129.000000000000000000
+    Position.Y = 128.000000000000000000
     Size.Width = 137.000000000000000000
     Size.Height = 32.000000000000000000
     Size.PlatformDefault = False
     TextSettings.Font.Size = 18.000000000000000000
     TextSettings.FontColor = claCrimson
-    Text = 'Sua vez'
+    Text = 'Your turn:'
     TabOrder = 9
   end
   object CurrentPlayerSympolLabel: TLabel
     StyledSettings = [Family, Style]
-    Position.X = 168.000000000000000000
+    Position.X = 128.000000000000000000
     Position.Y = 128.000000000000000000
     Size.Width = 120.000000000000000000
     Size.Height = 33.000000000000000000
@@ -144,7 +144,7 @@ object Form1: TForm1
     TextSettings.Font.StyleExt = {00070000000200000004000000}
     TextSettings.FontColor = claOrchid
     TextSettings.HorzAlign = Center
-    Text = 'Jogo da Velha'
+    Text = 'Tic Tac Toe'
     TabOrder = 13
   end
   object Label3: TLabel
