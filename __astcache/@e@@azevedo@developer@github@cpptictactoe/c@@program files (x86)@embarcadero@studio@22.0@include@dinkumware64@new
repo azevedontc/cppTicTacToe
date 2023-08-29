@@ -1,0 +1,129 @@
+﻿// new standard header
+#ifndef _NEW_
+#define _NEW_
+#include <exception>
+
+_STD_BEGIN
+		// CLASS bad_alloc
+class bad_alloc
+	: public _XSTD exception
+	{	// base of all bad allocation exceptions
+public:
+	bad_alloc(const char *_Message = "bad allocation") _THROW0()
+		: exception(_Message)
+		{	// construct from message string
+		}
+
+	virtual ~bad_alloc() _NOEXCEPT
+		{	// destroy the object
+		}
+	};
+
+		// CLASS bad_array_new_length
+class bad_array_new_length
+	: public bad_alloc
+	{	// bad array new exception
+public:
+	bad_array_new_length() _THROW0()
+		: bad_alloc("bad array new length")
+		{	// default construct
+		}
+	};
+
+//#if C++17
+_INLINE_VAR _CONST_DATA size_t hardware_constructive_interference_size =
+	alignof(max_align_t);
+_INLINE_VAR _CONST_DATA size_t hardware_destructive_interference_size =
+	alignof(max_align_t);
+
+template<class _Type>
+	_CONST_FUN _Type *launder(_Type *_Ptr)
+	{	// make _Ptr constexpr
+	return (_Ptr);
+	}
+//#endif /* C++17 */
+
+#if defined(__CODEGEARC__) && defined(_HAS_CPP17)
+enum class align_val_t : std::size_t {};
+#else
+ #if __GNUC__ < 7 || !_HAS_CPP11
+enum class align_val_t : size_t {};
+ #endif /* __GNUC__ < 7, etc */
+#endif // __CODEGEARC__ && CPP17
+
+struct nothrow_t
+	{	// placement new tag type to suppress exceptions
+	explicit nothrow_t() = default;
+	};
+extern _CRTIMP2 const nothrow_t nothrow;	// constant for placement new tag
+typedef void (*new_handler)();	// handler for operator new failures
+
+_CRTIMP2 new_handler get_new_handler() _NOEXCEPT;	// get new handler
+_CRTIMP2 new_handler set_new_handler(new_handler) _NOEXCEPT;	// establish alternative
+_STD_END
+
+		// new AND delete DECLARATIONS (NB: NOT IN std)
+_CRTIMP2 void *operator new(_STD size_t);
+_CRTIMP2 void *operator new(_STD size_t, void *) _NOEXCEPT;
+_CRTIMP2 void *operator new(_STD size_t, const _STD nothrow_t&) _NOEXCEPT;
+
+//#if C++17
+_CRTIMP2 void *operator new(_STD size_t, _STD align_val_t);
+_CRTIMP2 void *operator new(_STD size_t, _STD align_val_t,
+	 const _STD nothrow_t&) _NOEXCEPT;
+//#endif /* C++17 */
+
+#if defined(__CODEGEARC__)
+_CRTIMP2 void operator delete(void *, void *) _NOEXCEPT;
+#else
+ #if !_CLANG	/* compiler test */
+void operator delete(void *, void *) _NOEXCEPT;
+ #endif /* !_CLANG */
+#endif
+
+_CRTIMP2 void operator delete(void *) _NOEXCEPT;
+_CRTIMP2 void operator delete(void *, _STD size_t) _NOEXCEPT;
+_CRTIMP2 void operator delete(void *, const _STD nothrow_t&) _NOEXCEPT;
+
+//#if C++17
+_CRTIMP2 void operator delete(void *, _STD align_val_t) _NOEXCEPT;
+_CRTIMP2 void operator delete(void *, _STD size_t, _STD align_val_t) _NOEXCEPT;
+_CRTIMP2 void operator delete(void *, _STD align_val_t,
+	const _STD nothrow_t&) _NOEXCEPT;
+//#endif /* C++17 */
+
+_CRTIMP2 void *operator new[](_STD size_t);
+_CRTIMP2 void *operator new[](_STD size_t, void *) _NOEXCEPT;
+_CRTIMP2 void *operator new[](_STD size_t, const _STD nothrow_t&) _NOEXCEPT;
+
+//#if C++17
+_CRTIMP2 void *operator new[](_STD size_t, _STD align_val_t);
+_CRTIMP2 void *operator new[](_STD size_t, _STD align_val_t,
+	 const _STD nothrow_t&) _NOEXCEPT;
+//#endif /* C++17 */
+
+#if defined(__CODEGEARC__)
+_CRTIMP2 void operator delete[](void *, void *) _NOEXCEPT;
+#else
+ #if !_CLANG	/* compiler test */
+void operator delete[](void *, void *) _NOEXCEPT;
+ #endif /* !_CLANG */
+#endif
+
+_CRTIMP2 void operator delete[](void *) _NOEXCEPT;
+_CRTIMP2 void operator delete[](void *, _STD size_t) _NOEXCEPT;
+_CRTIMP2 void operator delete[](void *, const _STD nothrow_t&) _NOEXCEPT;
+
+//#if C++17
+_CRTIMP2 void operator delete[](void *, _STD align_val_t) _NOEXCEPT;
+_CRTIMP2 void operator delete[](void *, _STD size_t, _STD align_val_t) _NOEXCEPT;
+_CRTIMP2 void operator delete[](void *, _STD align_val_t,
+	const _STD nothrow_t&) _NOEXCEPT;
+//#endif /* C++17 */
+
+#endif /* _NEW_ */
+
+/*
+ * Copyright (c) by P.J. Plauger. All rights reserved.
+ * Consult your license regarding permissions and restrictions.
+ * V8.05/17:1422 */

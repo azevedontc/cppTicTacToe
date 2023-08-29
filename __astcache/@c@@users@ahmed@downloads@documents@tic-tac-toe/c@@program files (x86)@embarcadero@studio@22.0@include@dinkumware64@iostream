@@ -1,0 +1,40 @@
+﻿// iostream standard header
+#ifndef _IOSTREAM_
+#define _IOSTREAM_
+#include <istream>
+_STD_BEGIN
+		// OBJECTS
+static ios_base::Init _Ios_init;	// force initialization of byte streams
+
+extern _CRTIMP2 istream cin;
+extern _CRTIMP2 ostream cout;
+extern _CRTIMP2 ostream cerr;
+
+ #if _IS_GHS
+extern ostream clog;
+
+ #else /* _IS_GHS */
+extern _CRTIMP2 ostream clog;
+ #endif /* _IS_GHS */
+
+		// CLASS _Winit
+class _CRTIMP2 _Winit
+	{	// controller for wide standard-stream initialization
+public:
+	_Winit();
+	~_Winit() _NOEXCEPT;
+private:
+	static int _Init_cnt;
+	};
+
+		// WIDE OBJECTS
+static _Winit _Wios_init;	// force initialization of wide streams
+extern _CRTIMP2 wistream wcin;
+extern _CRTIMP2 wostream wcout, wcerr, wclog;
+_STD_END
+#endif /* _IOSTREAM_ */
+
+/*
+ * Copyright (c) by P.J. Plauger. All rights reserved.
+ * Consult your license regarding permissions and restrictions.
+ * V8.05/17:1422 */

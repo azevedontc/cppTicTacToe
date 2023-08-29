@@ -1,0 +1,67 @@
+﻿// clocale standard header
+#ifndef _CLOCALE_
+#define _CLOCALE_
+
+ #if _IS_GHS
+#include <locale.h>
+
+ #if defined(__GHS_PRAGMAS)
+  #pragma ghs start_cxx_lib_header
+  #pragma ghs startdata
+ #endif /* defined(__GHS_PRAGMAS) */
+
+ #if defined(__ghs_max_pack_value)
+  #pragma pack (push, __ghs_max_pack_value)
+ #endif /* defined(__ghs_max_pack_value) */
+
+ #if defined(__NAMESPACES) && !defined(__EMBEDDED_CXX_HEADERS)
+namespace std {
+    using ::lconv;
+    using ::localeconv;
+    using ::setlocale;
+}
+ #endif /* defined(__NAMESPACES), etc. */
+
+ #if defined(__ghs_max_pack_value)
+  #pragma pack(pop)
+ #endif /* defined(__ghs_max_pack_value) */
+
+ #if defined(__GHS_PRAGMAS)
+  #pragma ghs enddata
+  #pragma ghs end_cxx_lib_header
+ #endif /* defined(__GHS_PRAGMAS) */
+
+ #else /* _IS_GHS */
+#include <yvals.h>
+
+#ifdef _STD_USING
+ #undef _STD_USING
+  #include <locale.h>
+ #define _STD_USING
+
+#else /* _STD_USING */
+ #include <locale.h>
+
+ #if defined(__BORLANDC__)	/* compiler test */
+  #define LC_MESSAGES	(LC_TIME << 1)
+ #endif /* defined(__BORLANDC__) */
+
+ #ifndef LC_MESSAGES
+  #define LC_MESSAGES	(LC_TIME + 1)
+ #endif /* LC_MESSAGES */
+
+#endif /* _STD_USING */
+
+ #ifdef _GLOBAL_USING
+_STD_BEGIN
+using _CSTD lconv; using _CSTD localeconv; using _CSTD setlocale;
+_STD_END
+ #endif /* _GLOBAL_USING */
+
+ #endif /* _IS_GHS */
+#endif /* _CLOCALE_ */
+
+/*
+ * Copyright (c) by P.J. Plauger. All rights reserved.
+ * Consult your license regarding permissions and restrictions.
+V8.03a/17:1422 */

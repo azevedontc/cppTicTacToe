@@ -1,0 +1,278 @@
+﻿// xxexception internal header for exception_ptr
+#ifndef _XXEXCEPTION_
+#define _XXEXCEPTION_
+
+#if defined(__CODEGEARC__)
+typedef void _Exc_ref_count;
+extern _EXPFUNC void *__cxa_current_primary_exception() throw();
+extern _EXPFUNC void __cxa_rethrow_primary_exception(void* primary_exception);
+extern _EXPFUNC void __cxa_increment_exception_refcount(void*) throw();
+extern _EXPFUNC void __cxa_decrement_exception_refcount(void*) throw();
+#else
+struct _Exc_ref_count;
+void _Incref(_Exc_ref_count *);
+void _Decref(_Exc_ref_count *);
+_Exc_ref_count *_Get_current_exception();
+void _Rethrow_exception(_Exc_ref_count *);
+#endif
+
+_X_STD_BEGIN
+	// CLASS exception_ptr
+class exception_ptr
+	{	// class for managing reference counted pointer to exception object
+public:
+	exception_ptr() _THROW0()
+		: _Ref(0)
+		{	// construct with no arguments
+		}
+
+	exception_ptr(_Exc_ref_count *_Ptr) _THROW0()
+		: _Ref(0)
+		{	// construct with _Ptr
+		_Assign(_Ptr);
+		}
+
+	exception_ptr(const exception_ptr& _Right) _THROW0()
+		: _Ref(0)
+		{	// construct by copying _Right
+		_Assign(_Right._Ref);
+		}
+
+#ifndef __CODEGEARC__
+	exception_ptr(const void *)
+		: _Ref(0)
+		{	// construct with null pointer constant
+		}
+#endif
+
+	exception_ptr& operator=(const exception_ptr& _Right) _THROW0()
+		{	// copy _Right
+		_Assign(_Right._Ref);
+		return (*this);
+		}
+
+	exception_ptr& operator=(const void *) _THROW0()
+		{	// assign from null pointer constant
+		_Assign(0);
+		return (*this);
+		}
+
+	~exception_ptr() _NOEXCEPT
+		{	// destroy
+#ifdef __CODEGEARC__
+                __cxa_decrement_exception_refcount(_Ref);
+#else
+//		_Decref(_Ref);
+#endif
+		}
+
+	_EXP_OP operator bool() const
+		{	// test if stream state okay
+		return (_Ref != 0);
+		}
+
+	void _Assign(_Exc_ref_count *_Ptr) _THROW0()
+		{	// copy _Ptr to *this
+#ifdef __CODEGEARC__
+                __cxa_increment_exception_refcount(_Ptr);
+                __cxa_decrement_exception_refcount(_Ref);
+#else
+//		_Incref(_Ptr);
+//		_Decref(_Ref);
+#endif
+		_Ref = _Ptr;
+		}
+
+	_Exc_ref_count *_Get() const _THROW0()
+		{	// get stored pointer
+		return (_Ref);
+		}
+
+private:
+	_Exc_ref_count *_Ref;
+	};
+
+inline bool operator==(
+	const exception_ptr& _Left,
+	const exception_ptr& _Right) _THROW0()
+	{	// compare for equality
+	return (_Left._Get() == _Right._Get());
+	}
+
+inline bool operator!=(
+	const exception_ptr& _Left,
+	const exception_ptr& _Right) _THROW0()
+	{	// compare for inequality
+	return (!(_Left == _Right));
+	}
+
+inline bool operator==(
+	const exception_ptr& _Left,
+	const void *) _THROW0()
+	{	// compare with null pointer
+	return (_Left._Get() == 0);
+	}
+
+inline bool operator!=(
+	const exception_ptr& _Left,
+	const void *) _THROW0()
+	{	// compare with null pointer
+	return (!(_Left._Get() == 0));
+	}
+
+inline bool operator==(
+	const void *,
+	const exception_ptr& _Right) _THROW0()
+	{	// compare with null pointer
+	return (_Right._Get() == 0);
+	}
+
+inline bool operator!=(
+	const void *,
+	const exception_ptr& _Right) _THROW0()
+	{	// compare with null pointer
+	return (!(_Right._Get() == 0));
+	}
+
+	// FUNCTIONS FOR exception_ptr
+inline exception_ptr current_exception() _NOEXCEPT
+	{	// return exception_ptr object pointing to the current exception
+#ifdef __CODEGEARC__
+        return exception_ptr(__cxa_current_primary_exception());
+#else
+	return (exception_ptr());
+#endif
+	}
+
+inline void rethrow_exception(exception_ptr _Ptr)	// NO RETURN
+	{	// rethrow exception pointed to by _Ptr
+#ifdef __CODEGEARC__
+        if (_Ptr._Get())
+                __cxa_rethrow_primary_exception(_Ptr._Get());
+#else
+//	if (_Ptr._Get())
+//		_Rethrow_exception(_Ptr._Get());
+#endif
+	}
+_X_STD_END
+
+_X_STD_BEGIN
+	// FUNCTION make_exception_ptr
+template<class _Excep> inline
+	exception_ptr make_exception_ptr(_Excep _Ex) _NOEXCEPT
+	{	// copy exception pointer
+	_TRY_BEGIN
+	_RAISE(_Ex);
+	_CATCH_ALL
+	int _Zero = 0;
+	if (_Zero == 0)	// to quiet diagnostics
+		return (current_exception());
+	_CATCH_END
+	return (exception_ptr());	// to quiet diagnostics
+	}
+
+	// CLASS nested_exception
+class nested_exception
+	{	// wraps an exception_ptr
+public:
+	nested_exception() _THROW0()
+		: _Myptr(current_exception())
+		{	// default construct
+		}
+
+	nested_exception(const nested_exception& _Right) = default;
+
+	nested_exception& operator=(
+		const nested_exception& _Right) = default;
+
+//	virtual ~nested_exception() _NOEXCEPT = default;
+	virtual ~nested_exception() _NOEXCEPT
+		{	// delete the object
+		}
+
+	exception_ptr nested_ptr() const _NOEXCEPT
+		{	// get stored pointer
+		return (_Myptr);
+		}
+
+	void rethrow_nested() const	// _NO_RETURN
+		{	// rethrow stored exception
+		rethrow_exception(_Myptr);
+		}
+
+	_EXP_OP operator bool() const
+		{	// test if pointer not null
+		return (bool(_Myptr));
+		}
+
+private:
+	exception_ptr _Myptr;
+	};
+
+	// TEMPLATE FUNCTION throw_with_nested
+template<class _Ty>
+	struct _Wrapped_with_nested
+		: _Ty, nested_exception
+	{	// wrap _Ty and current_exception()
+	_Wrapped_with_nested(_Ty&& _Val)
+		: _Ty((_Ty&&)(_Val))
+		{	// construct with _Val
+		}
+	};
+
+template<class _Ty> inline
+	void _Throw_with_nested0(_Ty&& _Val, ...)		// _NO_RETURN
+	{	// throw _Val
+	_THROW1((_Ty&&)(_Val));
+	}
+
+template<class _Ty> inline
+	void _Throw_with_nested0(_Ty&& _Val,
+		const _Wrapped_with_nested<_Ty>*)		// _NO_RETURN
+	{	// throw wrapped object holding _Val and current exception
+	_THROW1(_Wrapped_with_nested<_Ty>((_Ty&&)(_Val)));
+	}
+
+template<class _Ty> inline
+	void _Throw_with_nested(_Ty&& _Val,
+		const volatile void *)	// _NO_RETURN
+	{	// throw wrapped object holding _Val and current exception
+	_Throw_with_nested0(_Val, 0);
+	}
+
+template<class _Ty> inline
+	void _Throw_with_nested(_Ty&& _Val,
+		const volatile nested_exception *)	// _NO_RETURN
+	{	// throw _Val
+	_THROW1((_Ty&&)(_Val));
+	}
+
+template<class _Ty> inline
+	void throw_with_nested(_Ty&& _Val)	// _NO_RETURN
+	{	// throw _Val
+	_Throw_with_nested(_Val, &_Val);
+	}
+
+	// TEMPLATE FUNCTION rethrow_if_nested
+inline void _Rethrow_if_nested(const nested_exception *_Val)
+	{	// throw exception captured by _Val's nested_exception base
+	if (_Val->nested_ptr())
+		_Val->rethrow_nested();
+	}
+
+inline void _Rethrow_if_nested(const void *)
+	{	// do nothing: no nested_exception base
+	}
+
+template<class _Ex> inline
+	void rethrow_if_nested(const _Ex& _Val)
+	{	// throw exception captured by _Val's nested_exception base, if any
+	_Rethrow_if_nested(&_Val);
+	}
+_X_STD_END
+#endif /* _XXEXCEPTION_ */
+
+/*
+ * Copyright (c) by P.J. Plauger. All rights reserved.
+ * Consult your license regarding permissions and restrictions.
+ * V8.05/17:1422 */

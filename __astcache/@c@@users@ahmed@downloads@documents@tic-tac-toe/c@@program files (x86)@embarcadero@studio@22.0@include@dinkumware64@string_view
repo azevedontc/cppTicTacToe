@@ -1,0 +1,10 @@
+﻿// string_view header
+#ifndef _STRING_VIEW_
+#define _STRING_VIEW_
+#include <string>
+#endif /* _STRING_VIEW_ */
+
+/*
+ * Copyright (c) by P.J. Plauger. All rights reserved.
+ * Consult your license regarding permissions and restrictions.
+ * V8.05/17:1422 */

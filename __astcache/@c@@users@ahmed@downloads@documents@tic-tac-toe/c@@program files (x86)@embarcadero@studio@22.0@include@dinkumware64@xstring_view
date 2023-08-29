@@ -1,0 +1,669 @@
+﻿// xstring_view internal header
+#ifndef _XSTRING_VIEW_
+#define _XSTRING_VIEW_
+#include <xmemory0>
+
+_STD_BEGIN
+template<class _Elem,
+	class _Traits,
+	class _Alloc>
+	class basic_string;
+
+template<class _Elem,
+	class _Traits = char_traits<_Elem> >
+	class basic_string_view
+	{	// constant, transparent contiguout sequence of elements
+public:
+	typedef _Traits traits_type;
+	typedef _Elem value_type;
+	typedef _Elem *pointer;
+	typedef const _Elem *const_pointer;
+	typedef _Elem& reference;
+	typedef const _Elem& const_reference;
+	typedef const _Elem *const_iterator;
+	typedef const_iterator iterator;
+	typedef reverse_iterator<const_iterator> const_reverse_iterator;
+	typedef const_reverse_iterator reverse_iterator;
+	typedef size_t size_type;
+	typedef ptrdiff_t difference_type;
+	static _CONST_FUN size_type npos = size_type(-1);
+
+	_CONST_FUN basic_string_view() _NOEXCEPT
+		: _Data(nullptr),
+		_Size(0)
+		{	// default construct
+		}
+
+	_CONST_FUN basic_string_view(
+		const basic_string_view&) _NOEXCEPT = default;
+
+	basic_string_view& operator=(
+		const basic_string_view&) _NOEXCEPT = default;
+
+	template<class _Alloc>
+		basic_string_view(
+			const basic_string<_Elem, _Traits, _Alloc>& _Str) _NOEXCEPT
+		: _Data(_Str.data()),
+		_Size(_Str.size())
+		{	// construct from basic_string
+		}
+
+	_CONST_FUN basic_string_view(const _Elem *_Str)
+		: _Data(_Str),
+		_Size(_Traits::length(_Str))
+		{	// construct from NTCS
+		}
+
+	_CONST_FUN basic_string_view(const _Elem *_Str, size_type _Len)
+		: _Data(_Str),
+		_Size(_Len)
+		{	// construct from pointer and length
+		}
+
+	_CONST_FUN const_iterator begin() const _NOEXCEPT
+		{	// get begin iterator
+		return (const_iterator(_Data));
+		}
+	_CONST_FUN const_iterator end() const _NOEXCEPT
+		{	// get end iterator
+		return (const_iterator(_Data + _Size));
+		}
+	_CONST_FUN const_iterator cbegin() const _NOEXCEPT
+		{	// get begin iterator
+		return (const_iterator(_Data));
+		}
+	_CONST_FUN const_iterator cend() const _NOEXCEPT
+		{	// get end iterator
+		return (const_iterator(_Data + _Size));
+		}
+
+	const_reverse_iterator rbegin() const _NOEXCEPT
+		{	// get reverse begin iterator
+		return (const_reverse_iterator(end()));
+		}
+	const_reverse_iterator rend() const _NOEXCEPT
+		{	// get reverse end iterator
+		return (const_reverse_iterator(begin()));
+		}
+	const_reverse_iterator crbegin() const _NOEXCEPT
+		{	// get reverse begin iterator
+		return (const_reverse_iterator(end()));
+		}
+	const_reverse_iterator crend() const _NOEXCEPT
+		{	// get reverse end iterator
+		return (const_reverse_iterator(begin()));
+		}
+
+	_CONST_FUN size_type size() const _NOEXCEPT
+		{	// get size
+		return (_Size);
+		}
+	_CONST_FUN size_type length() const _NOEXCEPT
+		{	// get length
+		return (_Size);
+		}
+	_CONST_FUN size_type max_size() const _NOEXCEPT
+		{	// get maximum possible length
+		return (sizeof (_Elem) == 1 ? (size_type)(-1) - 1
+			: (size_type)(-1) / sizeof (_Elem));
+		}
+	_CONST_FUN bool empty() const _NOEXCEPT
+		{	// test for empty string
+		return (_Size == 0);
+		}
+
+	_CONST_FUN const_reference operator[](size_type _Off) const
+		{	// get reference to element at _Off
+		return (const_reference(_Data[_Off]));
+		}
+	_CONST_FUN const_reference at(size_type _Off) const
+		{	// get reference to element at _Off
+		if (size() <= _Off)
+			_Xout_of_range("basic_string_view::at(offset) out of range");
+		return (const_reference(_Data[_Off]));
+		}
+
+	_CONST_FUN const_reference front() const
+		{	// get reference to first element
+		return (const_reference(_Data[0]));
+		}
+	_CONST_FUN const_reference back() const
+		{	// get reference to last element
+		return (const_reference(_Data[_Size - 1]));
+		}
+
+	_CONST_FUN const_pointer data() const _NOEXCEPT
+		{	// get pointer to first element
+		return (_Data);
+		}
+
+	_CONST_FUN void remove_prefix(size_type _Off)
+		{	// remove first _Off elements
+		_Data += _Off;
+		_Size -= _Off;
+		}
+	_CONST_FUN void remove_suffix(size_type _Off)
+		{	// remove last _Off elements
+		_Size -= _Off;
+		}
+
+	_CONST_FUN void swap(basic_string_view& _Right) _NOEXCEPT
+		{	// swap *this and _Right
+		_STD swap(_Data, _Right._Data);
+		_STD swap(_Size, _Right._Size);
+		}
+
+	size_type copy(_Elem *_Str, size_type _Len, size_type _Off = 0) const
+		{	// copy out substring to _Str
+		if (size() < _Off)
+			_Xout_of_range("basic_string_view::copy bad beginning offset");
+		if (size() - _Off < _Len)
+			_Len = _Size - _Off;
+		_STD copy_n(_Data + _Off, _Len, _Str);
+		return (_Len);
+		}
+
+	_CONST_FUN basic_string_view substr(
+		size_type _Off = 0, size_type _Len = npos) const
+		{	// copy out substring as a basic_string_view
+		if (size() < _Off)
+			_Xout_of_range("basic_string_view::substr bad beginning offset");
+		if (size() - _Off < _Len)
+			_Len = _Size - _Off;
+		return (basic_string_view(_Data + _Off, _Len));
+		}
+
+	_CONST_FUN int compare(basic_string_view _Str) const _NOEXCEPT
+		{	// compare with basic_string_view
+		size_type _Len = size() < _Str.size() ? size() : _Str.size();
+		int _Cmp = _Traits::compare(data(), _Str.data(), _Len);
+		return (_Cmp != 0 ? _Cmp : size() < _Str.size() ? -1
+			: size() == _Str.size() ? 0 : 1);
+		}
+
+	_CONST_FUN int compare(size_type _Off, size_type _Len,
+		basic_string_view _Str) const
+		{	// compare with [_Off, _Off + _Len)
+		return (substr(_Off, _Len).compare(_Str));
+		}
+
+	_CONST_FUN int compare(size_type _Off1, size_type _Len1,
+		basic_string_view _Str, size_type _Off2, size_type _Len2) const
+		{	// compare [_Off1, _Len1) with [_Off2, _Off2 + _Len)
+		return (substr(_Off1, _Len1).compare(_Str.substr(_Off2, _Len2)));
+		}
+
+	_CONST_FUN int compare(const _Elem *_Str) const
+		{	// compare with basic_string_view(_Str)
+		return (compare(basic_string_view(_Str)));
+		}
+
+	_CONST_FUN int compare(size_type _Off, size_type _Len,
+		const _Elem *_Str) const
+		{	// compare substr(_Off, _Len) with basic_string_view(_Str)
+		return (substr(_Off, _Len).compare(basic_string_view(_Str)));
+		}
+
+	_CONST_FUN int compare(size_type _Off1, size_type _Len1,
+		const char *_Str, size_type _Len2) const
+		{	// compare basic_string_view(_Str) with [_Off2, _Off2 + _Len)
+		return (substr(_Off1, _Len1).compare(basic_string_view(_Str, _Len2)));
+		}
+
+	_CONST_FUN size_type find(basic_string_view _Str,
+		size_type _Off = 0) const _NOEXCEPT
+		{	// find first substring
+		if (size() < _Str.size())
+			return (npos);	// can't possibly match
+		size_t _Last = size() - _Str.size();
+		for (size_type _Idx1 = _Off; _Idx1 <= _Last; ++_Idx1)
+			{	// look for substring beginning at _Off
+			size_type _Idx2 = 0;
+			for (; _Idx2 < _Str.size(); ++_Idx2)
+				if (!_Traits::eq(at(_Idx1 + _Idx2), _Str.at(_Idx2)))
+					break;
+			if (_Str.size() <= _Idx2)
+				return (_Idx1);	// success
+			}
+		return (npos);	// failure
+		}
+
+	_CONST_FUN size_type find(_Elem _Ch,
+		size_type _Off = 0) const _NOEXCEPT
+		{	// find first basic_string_view(&_Ch, 1) substring
+		return (find(basic_string_view(&_Ch, 1), _Off));
+		}
+
+	_CONST_FUN size_type find(const _Elem *_Ptr,
+		size_type _Off, size_type _Len) const
+		{	// find first basic_string_view(_Ptr, _Len) substring
+		return (find(basic_string_view(_Ptr, _Len), _Off));
+		}
+
+	_CONST_FUN size_type find(const _Elem *_Ptr,
+		size_type _Off = 0) const
+		{	// find first basic_string_view(_Ptr) substring
+		return (find(basic_string_view(_Ptr), _Off));
+		}
+
+	_CONST_FUN size_type rfind(basic_string_view _Str,
+		size_type _Off = npos) const _NOEXCEPT
+		{	// find last substring
+		if (size() < _Str.size())
+			return (npos);	// can't possibly match
+		size_t _Last = size() - _Str.size();
+		if (_Off < _Last)
+			_Last = _Off;
+		for (size_type _Idx1 = _Last; ; --_Idx1)
+			{	// look for substring beginning at or before _Off
+			size_type _Idx2 = 0;
+			for (; _Idx2 < _Str.size(); ++_Idx2)
+				if (!_Traits::eq(at(_Idx1 + _Idx2), _Str.at(_Idx2)))
+					break;
+			if (_Str.size() <= _Idx2)
+				return (_Idx1);	// success
+			if (_Idx1 == 0)
+				return (npos);	// failure
+			}
+		}
+
+	_CONST_FUN size_type rfind(_Elem _Ch,
+		size_type _Off = npos) const _NOEXCEPT
+		{	// find last basic_string_view(&_Ch, 1) substring
+		return (rfind(basic_string_view(&_Ch, 1), _Off));
+		}
+
+	_CONST_FUN size_type rfind(const _Elem *_Ptr,
+		size_type _Off, size_type _Len) const
+		{	// find last basic_string_view(_Ptr, _Len) substring
+		return (rfind(basic_string_view(_Ptr, _Len), _Off));
+		}
+
+	_CONST_FUN size_type rfind(const _Elem *_Ptr,
+		size_type _Off = npos) const
+		{	// find last basic_string_view(_Ptr) substring
+		return (rfind(basic_string_view(_Ptr), _Off));
+		}
+
+	_CONST_FUN size_type find_first_of(basic_string_view _Str,
+		size_type _Off = 0) const _NOEXCEPT
+		{	// find first instance in string
+		for (size_type _Idx1 = _Off; _Idx1 < size(); ++_Idx1)
+			{	// look for instance in _Str matching at(_Idx1)
+			for (size_type _Idx2 = 0; _Idx2 < _Str.size(); ++_Idx2)
+				if (_Traits::eq(at(_Idx1), _Str.at(_Idx2)))
+					return (_Idx1);	// success;
+			}
+		return (npos);	// failure
+		}
+
+	_CONST_FUN size_type find_first_of(_Elem _Ch,
+		size_type _Off = 0) const _NOEXCEPT
+		{	// find first instance in basic_string_view(&_Ch, 1)
+		return (find_first_of(basic_string_view(&_Ch, 1), _Off));
+		}
+
+	_CONST_FUN size_type find_first_of(const _Elem *_Ptr,
+		size_type _Off, size_type _Len) const
+		{	// find first instance in basic_string_view(_Ptr, _Len)
+		return (find_first_of(basic_string_view(_Ptr, _Len), _Off));
+		}
+
+	_CONST_FUN size_type find_first_of(const _Elem *_Ptr,
+		size_type _Off = 0) const
+		{	// find first instance in basic_string_view(_Ptr)
+		return (find_first_of(basic_string_view(_Ptr), _Off));
+		}
+
+	_CONST_FUN size_type find_last_of(basic_string_view _Str,
+		size_type _Off = npos) const _NOEXCEPT
+		{	// find last instance in string
+		if (size() < _Off)
+			_Off = size();
+		for (size_type _Idx1 = size(); 0 < _Idx1--; )
+			{	// look for instance in _Str matching at(_Idx1)
+			for (size_type _Idx2 = 0; _Idx2 < _Str.size(); ++_Idx2)
+				if (_Traits::eq(at(_Idx1), _Str.at(_Idx2)))
+					return (_Idx1);	// success;
+			}
+		return (npos);	// failure
+		}
+
+	_CONST_FUN size_type find_last_of(_Elem _Ch,
+		size_type _Off = npos) const _NOEXCEPT
+		{	// find last instance in basic_string_view(&_Ch, 1)
+		return (find_last_of(basic_string_view(&_Ch, 1), _Off));
+		}
+
+	_CONST_FUN size_type find_last_of(const _Elem *_Ptr,
+		size_type _Off, size_type _Len) const
+		{	// find last instance in basic_string_view(_Ptr, _Len)
+		return (find_last_of(basic_string_view(_Ptr, _Len), _Off));
+		}
+
+	_CONST_FUN size_type find_last_of(const _Elem *_Ptr,
+		size_type _Off = npos) const
+		{	// find last instance in basic_string_view(_Ptr)
+		return (find_last_of(basic_string_view(_Ptr), _Off));
+		}
+
+	_CONST_FUN size_type find_first_not_of(basic_string_view _Str,
+		size_type _Off = 0) const _NOEXCEPT
+		{	// find first instance not in string
+		for (size_type _Idx1 = _Off; _Idx1 < size(); ++_Idx1)
+			{	// look for instance in _Str matching at(_Idx1)
+			size_type _Idx2 = 0;
+			for (; _Idx2 < _Str.size(); ++_Idx2)
+				if (_Traits::eq(at(_Idx1), _Str.at(_Idx2)))
+					break;
+			if (_Str.size() <= _Idx2)
+				return (_Idx1);	// success
+			}
+		return (npos);	// failure
+		}
+
+	_CONST_FUN size_type find_first_not_of(_Elem _Ch,
+		size_type _Off = 0) const _NOEXCEPT
+		{	// find first instance not in basic_string_view(&_Ch, 1)
+		return (find_first_not_of(basic_string_view(&_Ch, 1), _Off));
+		}
+
+	_CONST_FUN size_type find_first_not_of(const _Elem *_Ptr,
+		size_type _Off, size_type _Len) const
+		{	// find first instance not in basic_string_view(_Ptr, _Len)
+		return (find_first_not_of(basic_string_view(_Ptr, _Len), _Off));
+		}
+
+	_CONST_FUN size_type find_first_not_of(const _Elem *_Ptr,
+		size_type _Off = 0) const
+		{	// find first instance not in basic_string_view(_Ptr)
+		return (find_first_not_of(basic_string_view(_Ptr), _Off));
+		}
+
+	_CONST_FUN size_type find_last_not_of(basic_string_view _Str,
+		size_type _Off = npos) const _NOEXCEPT
+		{	// find last instance not in string
+		if (size() < _Off)
+			_Off = size();
+		for (size_type _Idx1 = size(); 0 < _Idx1--; )
+			{	// look for instance in _Str matching at(_Idx1)
+			size_type _Idx2 = 0;
+			for (; _Idx2 < _Str.size(); ++_Idx2)
+				if (_Traits::eq(at(_Idx1), _Str.at(_Idx2)))
+					break;
+			if (_Idx2 == _Str.size())
+				return (_Idx1);	// success
+			}
+		return (npos);	// failure
+		}
+
+	_CONST_FUN size_type find_last_not_of(_Elem _Ch,
+		size_type _Off = npos) const _NOEXCEPT
+		{	// find last instance not in basic_string_view(&_Ch, 1)
+		return (find_last_not_of(basic_string_view(&_Ch, 1), _Off));
+		}
+
+	_CONST_FUN size_type find_last_not_of(const _Elem *_Ptr,
+		size_type _Off, size_type _Len) const
+		{	// find last instance not in basic_string_view(_Ptr, _Len)
+		return (find_last_not_of(basic_string_view(_Ptr, _Len), _Off));
+		}
+
+	_CONST_FUN size_type find_last_not_of(const _Elem *_Ptr,
+		size_type _Off = npos) const
+		{	// find last instance not in basic_string_view(_Ptr)
+		return (find_last_not_of(basic_string_view(_Ptr), _Off));
+		}
+
+ private:
+	const_pointer _Data;
+	size_type _Size;
+	};
+
+	// COMPARISON TEMPLATE FUNCTIONS
+template<class _Elem,
+	class _Traits>
+_CONST_FUN bool operator==(basic_string_view<_Elem, _Traits> _Left,
+	basic_string_view<_Elem, _Traits> _Right) _NOEXCEPT
+	{	// test if _Left == _Right
+	return (_Left.compare(_Right) == 0);
+	}
+template<class _Elem,
+	class _Traits>
+_CONST_FUN bool operator==(decay_t<basic_string_view<_Elem, _Traits> > _Left,
+	basic_string_view<_Elem, _Traits> _Right) _NOEXCEPT
+	{	// test if _Left == _Right
+	return (_Left.compare(_Right) == 0);
+	}
+template<class _Elem,
+	class _Traits>
+_CONST_FUN bool operator==(basic_string_view<_Elem, _Traits> _Left,
+	decay_t<basic_string_view<_Elem, _Traits> > _Right) _NOEXCEPT
+	{	// test if _Left == _Right
+	return (_Left.compare(_Right) == 0);
+	}
+
+template<class _Elem,
+	class _Traits>
+_CONST_FUN bool operator!=(basic_string_view<_Elem, _Traits> _Left,
+	basic_string_view<_Elem, _Traits> _Right) _NOEXCEPT
+	{	// test if _Left != _Right
+	return (!(_Left.compare(_Right) == 0));
+	}
+template<class _Elem,
+	class _Traits>
+_CONST_FUN bool operator!=(decay_t<basic_string_view<_Elem, _Traits> > _Left,
+	basic_string_view<_Elem, _Traits> _Right) _NOEXCEPT
+	{	// test if _Left != _Right
+	return (!(_Left.compare(_Right) == 0));
+	}
+template<class _Elem,
+	class _Traits>
+_CONST_FUN bool operator!=(basic_string_view<_Elem, _Traits> _Left,
+	decay_t<basic_string_view<_Elem, _Traits> > _Right) _NOEXCEPT
+	{	// test if _Left != _Right
+	return (!(_Left.compare(_Right) == 0));
+	}
+
+template<class _Elem,
+	class _Traits>
+_CONST_FUN bool operator<(basic_string_view<_Elem, _Traits> _Left,
+	basic_string_view<_Elem, _Traits> _Right) _NOEXCEPT
+	{	// test if _Left < _Right
+	return (_Left.compare(_Right) < 0);
+	}
+template<class _Elem,
+	class _Traits>
+_CONST_FUN bool operator<(decay_t<basic_string_view<_Elem, _Traits> > _Left,
+	basic_string_view<_Elem, _Traits> _Right) _NOEXCEPT
+	{	// test if _Left < _Right
+	return (_Left.compare(_Right) < 0);
+	}
+template<class _Elem,
+	class _Traits>
+_CONST_FUN bool operator<(basic_string_view<_Elem, _Traits> _Left,
+	decay_t<basic_string_view<_Elem, _Traits> > _Right) _NOEXCEPT
+	{	// test if _Left < _Right
+	return (_Left.compare(_Right) < 0);
+	}
+
+template<class _Elem,
+	class _Traits>
+_CONST_FUN bool operator>(basic_string_view<_Elem, _Traits> _Left,
+	basic_string_view<_Elem, _Traits> _Right) _NOEXCEPT
+	{	// test if _Left > _Right
+	return (0 < _Left.compare(_Right));
+	}
+template<class _Elem,
+	class _Traits>
+_CONST_FUN bool operator>(decay_t<basic_string_view<_Elem, _Traits> > _Left,
+	basic_string_view<_Elem, _Traits> _Right) _NOEXCEPT
+	{	// test if _Left > _Right
+	return (0 < _Left.compare(_Right));
+	}
+template<class _Elem,
+	class _Traits>
+_CONST_FUN bool operator>(basic_string_view<_Elem, _Traits> _Left,
+	decay_t<basic_string_view<_Elem, _Traits> > _Right) _NOEXCEPT
+	{	// test if _Left > _Right
+	return (0 < _Left.compare(_Right));
+	}
+
+template<class _Elem,
+	class _Traits>
+_CONST_FUN bool operator<=(basic_string_view<_Elem, _Traits> _Left,
+	basic_string_view<_Elem, _Traits> _Right) _NOEXCEPT
+	{	// test if _Left <= _Right
+	return (!(0 < _Left.compare(_Right)));
+	}
+template<class _Elem,
+	class _Traits>
+_CONST_FUN bool operator<=(decay_t<basic_string_view<_Elem, _Traits> > _Left,
+	basic_string_view<_Elem, _Traits> _Right) _NOEXCEPT
+	{	// test if _Left <= _Right
+	return (!(0 < _Left.compare(_Right)));
+	}
+template<class _Elem,
+	class _Traits>
+_CONST_FUN bool operator<=(basic_string_view<_Elem, _Traits> _Left,
+	decay_t<basic_string_view<_Elem, _Traits> > _Right) _NOEXCEPT
+	{	// test if _Left <= _Right
+	return (!(0 < _Left.compare(_Right)));
+	}
+
+template<class _Elem,
+	class _Traits>
+_CONST_FUN bool operator>=(basic_string_view<_Elem, _Traits> _Left,
+	basic_string_view<_Elem, _Traits> _Right) _NOEXCEPT
+	{	// test if _Left >= _Right
+	return (!(_Left.compare(_Right) < 0));
+	}
+template<class _Elem,
+	class _Traits>
+_CONST_FUN bool operator>=(decay_t<basic_string_view<_Elem, _Traits> > _Left,
+	basic_string_view<_Elem, _Traits> _Right) _NOEXCEPT
+	{	// test if _Left >= _Right
+	return (!(_Left.compare(_Right) < 0));
+	}
+template<class _Elem,
+	class _Traits>
+_CONST_FUN bool operator>=(basic_string_view<_Elem, _Traits> _Left,
+	decay_t<basic_string_view<_Elem, _Traits> > _Right) _NOEXCEPT
+	{	// test if _Left >= _Right
+	return (!(_Left.compare(_Right) < 0));
+	}
+
+template<class _Elem,
+	class _Traits>
+	basic_ostream<_Elem, _Traits>&
+		operator<<(basic_ostream<_Elem, _Traits>& _Ostr,
+			basic_string_view<_Elem, _Traits> _Str)
+	{	// insert a basic_string_view
+	return (_Ostr << basic_string<_Elem, _Traits, allocator<_Elem> >(
+		_Str.begin(), _Str.end()));
+	}
+
+using string_view  = basic_string_view<char>;
+using u16string_view = basic_string_view<char16_t>;
+using u32string_view = basic_string_view<char32_t>;
+using wstring_view = basic_string_view<wchar_t>;
+
+ #if _HAS_LITERALS
+	// basic_string_view LITERALS
+	inline namespace literals {
+		inline namespace string_view_literals {
+inline _CONST_FUN string_view operator ""sv(const char *_Str, size_t _Len)
+	_NOEXCEPT
+	{	// construct literal from [_Str, _Str + _Len)
+	return (string_view(_Str, _Len));
+	}
+
+inline _CONST_FUN u16string_view operator""sv(const char16_t *_Str, size_t _Len)
+	_NOEXCEPT
+	{	// construct literal from [_Str, _Str + _Len)
+	return (u16string_view(_Str, _Len));
+	}
+
+inline _CONST_FUN u32string_view operator""sv(const char32_t *_Str, size_t _Len)
+	_NOEXCEPT
+	{	// construct literal from [_Str, _Str + _Len)
+	return (u32string_view(_Str, _Len));
+	}
+
+inline _CONST_FUN wstring_view operator""sv(const wchar_t *_Str, size_t _Len)
+	_NOEXCEPT
+	{	// construct literal from [_Str, _Str + _Len)
+	return (wstring_view(_Str, _Len));
+	}
+		}	// inline namespace string_view_literals
+	}	// inline namespace literals
+ #endif /* _HAS_LITERALS */
+_STD_END
+
+namespace std {
+	// TEMPLATE STRUCT SPECIALIZATION hash
+template<class _Traits>
+	struct hash;
+
+template<>
+	struct hash<string_view>
+	{	// hash functor for string_view
+	typedef string_view argument_type;
+	typedef size_t result_type;
+	typedef char _Elem;
+
+	size_t operator()(const argument_type& _Keyval) const
+		{	// hash _Keyval to size_t value by pseudorandomizing transform
+		return (_Hash_seq((const unsigned char *)_Keyval.data(),
+			_Keyval.size() * sizeof (_Elem)));
+		}
+	};
+
+template<>
+	struct hash<u16string_view>
+	{	// hash functor for string_view
+	typedef u16string_view argument_type;
+	typedef size_t result_type;
+	typedef char16_t _Elem;
+
+	size_t operator()(const argument_type& _Keyval) const
+		{	// hash _Keyval to size_t value by pseudorandomizing transform
+		return (_Hash_seq((const unsigned char *)_Keyval.data(),
+			_Keyval.size() * sizeof (_Elem)));
+		}
+	};
+
+template<>
+	struct hash<u32string_view>
+	{	// hash functor for string_view
+	typedef u32string_view argument_type;
+	typedef size_t result_type;
+	typedef char32_t _Elem;
+
+	size_t operator()(const argument_type& _Keyval) const
+		{	// hash _Keyval to size_t value by pseudorandomizing transform
+		return (_Hash_seq((const unsigned char *)_Keyval.data(),
+			_Keyval.size() * sizeof (_Elem)));
+		}
+	};
+
+template<>
+	struct hash<wstring_view>
+	{	// hash functor for string_view
+	typedef wstring_view argument_type;
+	typedef size_t result_type;
+	typedef wchar_t _Elem;
+
+	size_t operator()(const argument_type& _Keyval) const
+		{	// hash _Keyval to size_t value by pseudorandomizing transform
+		return (_Hash_seq((const unsigned char *)_Keyval.data(),
+			_Keyval.size() * sizeof (_Elem)));
+		}
+	};
+} // namespace std
+#endif /* _XSTRING_VIEW_ */
+
+/*
+ * Copyright (c) by P.J. Plauger. All rights reserved.
+ * Consult your license regarding permissions and restrictions.
+ * V8.05/17:1422 */

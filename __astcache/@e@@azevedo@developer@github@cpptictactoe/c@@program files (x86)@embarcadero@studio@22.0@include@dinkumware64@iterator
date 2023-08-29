@@ -1,0 +1,427 @@
+﻿// iterator standard header
+#ifndef _ITERATOR_
+#define _ITERATOR_
+#include <istream>
+#include <xutility>
+
+_STD_BEGIN
+		// TEMPLATE CLASS back_insert_iterator
+template<class _Container>
+	class back_insert_iterator
+		: public _Outit
+	{	// wrap pushes to back of container as output iterator
+public:
+	typedef back_insert_iterator<_Container> _Myt;
+	typedef _Container container_type;
+	typedef typename _Container::value_type _Valty;
+
+	explicit back_insert_iterator(_Container& _Cont)
+		: container(_STD addressof(_Cont))
+		{	// construct with container
+		}
+
+	_Myt& operator=(const _Valty& _Val)
+		{	// push value into container
+		container->push_back(_Val);
+		return (*this);
+		}
+
+	_Myt& operator=(_Valty&& _Val)
+		{	// push value into container
+		container->push_back(_STD forward<_Valty>(_Val));
+		return (*this);
+		}
+
+	_Myt& operator*()
+		{	// pretend to return designated value
+		return (*this);
+		}
+
+	_Myt& operator++()
+		{	// pretend to preincrement
+		return (*this);
+		}
+
+	_Myt operator++(int)
+		{	// pretend to postincrement
+		return (*this);
+		}
+
+protected:
+	_Container *container;	// pointer to container
+	};
+
+template<class _Container>
+	struct _Is_checked_helper<back_insert_iterator<_Container> >
+		: public true_type
+	{	// mark back_insert_iterator as checked
+	};
+
+		// TEMPLATE FUNCTION back_inserter
+template<class _Container> inline
+	back_insert_iterator<_Container> back_inserter(_Container& _Cont)
+	{	// return a back_insert_iterator
+	return (back_insert_iterator<_Container>(_Cont));
+	}
+
+		// TEMPLATE CLASS front_insert_iterator
+template<class _Container>
+	class front_insert_iterator
+		: public _Outit
+	{	// wrap pushes to front of container as output iterator
+public:
+	typedef front_insert_iterator<_Container> _Myt;
+	typedef _Container container_type;
+	typedef typename _Container::value_type _Valty;
+
+	explicit front_insert_iterator(_Container& _Cont)
+		: container(_STD addressof(_Cont))
+		{	// construct with container
+		}
+
+	_Myt& operator=(const _Valty& _Val)
+		{	// push value into container
+		container->push_front(_Val);
+		return (*this);
+		}
+
+	_Myt& operator=(_Valty&& _Val)
+		{	// push value into container
+		container->push_front(_STD forward<_Valty>(_Val));
+		return (*this);
+		}
+
+	_Myt& operator*()
+		{	// pretend to return designated value
+		return (*this);
+		}
+
+	_Myt& operator++()
+		{	// pretend to preincrement
+		return (*this);
+		}
+
+	_Myt operator++(int)
+		{	// pretend to postincrement
+		return (*this);
+		}
+
+protected:
+	_Container *container;	// pointer to container
+	};
+
+template<class _Container>
+	struct _Is_checked_helper<front_insert_iterator<_Container> >
+		: public true_type
+	{	// mark front_insert_iterator as checked
+	};
+
+		// TEMPLATE FUNCTION front_inserter
+template<class _Container> inline
+	front_insert_iterator<_Container> front_inserter(_Container& _Cont)
+	{	// return front_insert_iterator
+	return (front_insert_iterator<_Container>(_Cont));
+	}
+
+		// TEMPLATE CLASS insert_iterator
+template<class _Container>
+	class insert_iterator
+		: public _Outit
+	{	// wrap inserts into container as output iterator
+public:
+	typedef insert_iterator<_Container> _Myt;
+	typedef _Container container_type;
+	typedef typename _Container::value_type _Valty;
+
+	insert_iterator(_Container& _Cont, typename _Container::iterator _Where)
+		: container(_STD addressof(_Cont)), iter(_Where)
+		{	// construct with container and iterator
+		}
+
+	_Myt& operator=(const _Valty& _Val)
+		{	// insert into container and increment stored iterator
+		iter = container->insert(iter, _Val);
+		++iter;
+		return (*this);
+		}
+
+	_Myt& operator=(_Valty&& _Val)
+		{	// push value into container
+		iter = container->insert(iter, _STD forward<_Valty>(_Val));
+		++iter;
+		return (*this);
+		}
+
+	_Myt& operator*()
+		{	// pretend to return designated value
+		return (*this);
+		}
+
+	_Myt& operator++()
+		{	// pretend to preincrement
+		return (*this);
+		}
+
+	_Myt& operator++(int)
+		{	// pretend to postincrement
+		return (*this);
+		}
+
+protected:
+	_Container *container;	// pointer to container
+	typename _Container::iterator iter;	// iterator into container
+	};
+
+template<class _Container>
+	struct _Is_checked_helper<insert_iterator<_Container> >
+		: public true_type
+	{	// mark insert_iterator as checked
+	};
+
+		// TEMPLATE FUNCTION inserter
+template<class _Container> inline
+	insert_iterator<_Container> inserter(_Container& _Cont,
+		typename _Container::iterator _Where)
+	{	// return insert_iterator
+	return (insert_iterator<_Container>(_Cont, _Where));
+	}
+
+		// TEMPLATE CLASS istream_iterator
+template<class _Ty,
+	class _Elem = char,
+	class _Traits = char_traits<_Elem>,
+	class _Diff = ptrdiff_t>
+	class istream_iterator
+		: public iterator<input_iterator_tag, _Ty, _Diff,
+			const _Ty *, const _Ty&>
+	{	// wrap _Ty extracts from input stream as input iterator
+	typedef istream_iterator<_Ty, _Elem, _Traits, _Diff> _Myt;
+public:
+	typedef _Elem char_type;
+	typedef _Traits traits_type;
+	typedef basic_istream<_Elem, _Traits> istream_type;
+	typedef const _Ty *pointer;
+
+	_CONST_FUN istream_iterator()
+		: _Myistr(0), _Myval()
+		{	// construct singular iterator
+		}
+
+	istream_iterator(istream_type& _Istr)
+		: _Myistr(_STD addressof(_Istr))
+		{	// construct with input stream
+		_Getval();
+		}
+
+	const _Ty& operator*() const
+		{	// return designated value
+		return (_Myval);
+		}
+
+	pointer operator->() const
+		{	// return pointer to class object
+		return (_POINTER_TO(**this));
+		}
+
+	_Myt& operator++()
+		{	// preincrement
+		_Getval();
+		return (*this);
+		}
+
+	_Myt operator++(int)
+		{	// postincrement
+		_Myt _Tmp = *this;
+		++*this;
+		return (_Tmp);
+		}
+
+	bool _Equal(const _Myt& _Right) const
+		{	// test for iterator equality
+		return (_Myistr == _Right._Myistr);
+		}
+
+protected:
+	void _Getval()
+		{	// get a _Ty value if possible
+		if (_Myistr != 0 && !(*_Myistr >> _Myval))
+			_Myistr = 0;
+		}
+
+	istream_type *_Myistr;	// pointer to input stream
+	_Ty _Myval;	// lookahead value (valid if _Myistr is not null)
+	};
+
+template<class _Ty,
+	class _Elem,
+	class _Traits,
+	class _Diff>
+	struct _Is_checked_helper<istream_iterator<_Ty, _Elem, _Traits, _Diff> >
+		: public true_type
+	{	// mark istream_iterator as checked
+	};
+
+		// istream_iterator TEMPLATE OPERATORS
+template<class _Ty,
+	class _Elem,
+	class _Traits,
+	class _Diff> inline
+	bool operator==(
+		const istream_iterator<_Ty, _Elem, _Traits, _Diff>& _Left,
+		const istream_iterator<_Ty, _Elem, _Traits, _Diff>& _Right)
+	{	// test for istream_iterator equality
+	return (_Left._Equal(_Right));
+	}
+
+template<class _Ty,
+	class _Elem,
+	class _Traits,
+	class _Diff> inline
+	bool operator!=(
+		const istream_iterator<_Ty, _Elem, _Traits, _Diff>& _Left,
+		const istream_iterator<_Ty, _Elem, _Traits, _Diff>& _Right)
+	{	// test for istream_iterator inequality
+	return (!(_Left == _Right));
+	}
+
+		// TEMPLATE CLASS ostream_iterator
+template<class _Ty,
+	class _Elem = char,
+	class _Traits = char_traits<_Elem> >
+	class ostream_iterator
+		: public _Outit
+	{	// wrap _Ty inserts to output stream as output iterator
+public:
+	typedef _Elem char_type;
+	typedef _Traits traits_type;
+	typedef basic_ostream<_Elem, _Traits> ostream_type;
+
+	ostream_iterator(ostream_type& _Ostr,
+		const _Elem *_Delim = 0)
+		: _Myostr(_STD addressof(_Ostr)), _Mydelim(_Delim)
+		{	// construct from output stream and delimiter
+		}
+
+	ostream_iterator<_Ty, _Elem, _Traits>& operator=(const _Ty& _Val)
+		{	// insert value into output stream, followed by delimiter
+		*_Myostr << _Val;
+		if (_Mydelim != 0)
+			*_Myostr << _Mydelim;
+		return (*this);
+		}
+
+	ostream_iterator<_Ty, _Elem, _Traits>& operator*()
+		{	// pretend to return designated value
+		return (*this);
+		}
+
+	ostream_iterator<_Ty, _Elem, _Traits>& operator++()
+		{	// pretend to preincrement
+		return (*this);
+		}
+
+	ostream_iterator<_Ty, _Elem, _Traits>& operator++(int)
+		{	// pretend to postincrement
+		return (*this);
+		}
+
+protected:
+	const _Elem *_Mydelim;	// pointer to delimiter string (NB: not freed)
+	ostream_type *_Myostr;	// pointer to output stream
+	};
+
+template<class _Ty,
+	class _Elem,
+	class _Traits>
+	struct _Is_checked_helper<ostream_iterator<_Ty, _Elem, _Traits> >
+		: public true_type
+	{	// mark ostream_iterator as checked
+	};
+
+ #if _HAS_CPP17
+namespace experimental {
+	inline namespace fundamentals_v2 {
+	// TEMPLATE CLASS ostream_joiner
+template<class _Delty,
+	class _Elem = char,
+	class _Traits = char_traits<_Elem> >
+	class ostream_joiner
+	{	// supplies delimiters between inserts
+public:
+	typedef _Elem char_type;
+	typedef _Traits traits_type;
+	typedef basic_ostream<_Elem, _Traits> ostream_type;
+	typedef output_iterator_tag iterator_category;
+	typedef void value_type;
+	typedef void difference_type;
+	typedef void pointer;
+	typedef void reference;
+
+	ostream_joiner(ostream_type& _Ostr, const _Delty& _Delim)
+		: _Myostr(_STD addressof(_Ostr)),
+			_Mydel(_Delim),
+			_Myfirst(true)
+		{	// initialize all fields
+		}
+		
+	ostream_joiner(ostream_type& _Ostr, _Delty&& _Delim)
+		: _Myostr(_STD addressof(_Ostr)),
+			_Mydel(_STD move(_Delim)),
+			_Myfirst(true)
+		{	// initialize all fields
+		}
+		
+	template<class _Ty>
+		ostream_joiner& operator=(const _Ty& _Value)
+		{	// insert a value
+		if (!_Myfirst)
+			*_Myostr << _Mydel;
+		_Myfirst = false;
+		*_Myostr << _Value;
+		return (*this);
+		}
+
+	ostream_joiner& operator*() _NOEXCEPT
+		{	// just return *this
+		return (*this);
+		}
+
+	ostream_joiner& operator++() _NOEXCEPT
+		{	// just return *this
+		return (*this);
+		}
+
+	ostream_joiner& operator++(int) _NOEXCEPT
+		{	// just return *this
+		return (*this);
+		}
+
+private:
+	ostream_type *_Myostr;
+	_Delty _Mydel;
+	bool _Myfirst;
+	};
+
+	// TEMPLATE FUNCTION make_ostream_joiner
+template<class _Elem,
+	class _Traits,
+	class _Delty>
+	ostream_joiner<decay_t<_Delty>, _Elem, _Traits>
+		make_ostream_joiner(basic_ostream<_Elem, _Traits>& _Ostr,
+			_Delty _Delim)
+	{	// make an ostream_joiner
+	return (ostream_joiner<decay_t<_Delty>, _Elem, _Traits>(_Ostr,
+		_STD forward<_Delty>(_Delim)));
+	}
+		} // namespace fundamentals_v2
+using namespace fundamentals_v2;
+	} // namespace experimental
+using namespace experimental::fundamentals_v2;
+ #endif /* _HAS_CPP17 */
+_STD_END
+#endif /* _ITERATOR_ */
+
+/*
+ * Copyright (c) by P.J. Plauger. All rights reserved.
+ * Consult your license regarding permissions and restrictions.
+ * V8.05/17:1422 */

@@ -1,0 +1,370 @@
+﻿// xfunctional internal header (C++17 additions)
+#ifndef _XFUNCTIONAL2_
+#define _XFUNCTIONAL2_
+
+#include <stdexcept>	// for boyer_moore/_horspool_searcher
+
+_STD_BEGIN
+	// TEMPLATE FUNCTION not_fn
+template<class _Fty>
+	struct _Not_fn
+	{	// wraps const/volatile variants of not_fn
+	_Fty _Myfunc;	// the stored functor
+
+	_Not_fn(_Fty&& _Func)
+		: _Myfunc(_STD forward<_Fty>(_Func))
+		{	// move construct
+		}
+
+	template<class... _Types>
+		auto operator()(_Types&&... _Args)
+			_NOEXCEPT_OP(_NOEXCEPT_OP(
+				!_STD invoke(_Myfunc, _STD forward<_Types>(_Args)...)))
+		-> decltype(!_STD invoke(_Myfunc, _STD forward<_Types>(_Args)...))
+		{	// evaluate non_const/non_volatile
+		return (!_STD invoke(_Myfunc, _STD forward<_Types>(_Args)...));
+		}
+
+	template<class... _Types>
+		auto operator()(_Types&&... _Args) const
+			_NOEXCEPT_OP(_NOEXCEPT_OP(
+				!_STD invoke(_Myfunc, _STD forward<_Types>(_Args)...)))
+		-> decltype(!_STD invoke(_Myfunc, _STD forward<_Types>(_Args)...))
+		{	// evaluate const/non_volatile
+		return (!_STD invoke(_Myfunc, _STD forward<_Types>(_Args)...));
+		}
+
+	template<class... _Types>
+		auto operator()(_Types&&... _Args) volatile
+			_NOEXCEPT_OP(_NOEXCEPT_OP(
+				!_STD invoke(_Myfunc, _STD forward<_Types>(_Args)...)))
+		-> decltype(!_STD invoke(_Myfunc, _STD forward<_Types>(_Args)...))
+		{	// evaluate non_const/volatile
+		return (!_STD invoke(_Myfunc, _STD forward<_Types>(_Args)...));
+		}
+
+	template<class... _Types>
+		auto operator()(_Types&&... _Args) const volatile
+			_NOEXCEPT_OP(_NOEXCEPT_OP(
+				!_STD invoke(_Myfunc, _STD forward<_Types>(_Args)...)))
+		-> decltype(!_STD invoke(_Myfunc, _STD forward<_Types>(_Args)...))
+		{	// evaluate const/volatile
+		return (!_STD invoke(_Myfunc, _STD forward<_Types>(_Args)...));
+		}
+	};
+
+template<class _Fty> inline
+	_Not_fn<decay_t<_Fty> > not_fn(_Fty&& _Func)
+	{	// compute functor for !_Fty(args..)
+	return (_STD forward<_Fty>(_Func));
+	}
+
+	// TEMPLATE CLASS default_searcher
+template<class _FwdIt,
+	class _Pr = equal_to<> >
+	class default_searcher
+	{	// searches using _STD search
+public:
+	default_searcher(_FwdIt _First_arg, _FwdIt _Last_arg,
+		_Pr _Pred_arg = _Pr())
+		: _First(_First_arg), _Last(_Last_arg), _Pred(_Pred_arg)
+	{	// construct with values
+	}
+
+	template<class _FwdIt2>
+		pair<_FwdIt2, _FwdIt2> operator()(_FwdIt2 _First_arg,
+			_FwdIt2 _Last_arg) const
+	{	// call _STD search
+	_FwdIt2 _Ans = _STD search(_First_arg, _Last_arg, _First, _Last, _Pred);
+	return (pair<_FwdIt2, _FwdIt2>(_Ans,
+		_Ans == _Last_arg ? _Last_arg
+			: _STD next(_Ans, _STD distance(_First, _Last))));
+	}
+
+private:
+	_FwdIt _First;
+	_FwdIt _Last;
+	_Pr _Pred;
+	};
+
+	// TEMPLATE FUNCTION make_default_searcher
+template<class _FwdIt,
+	class _Pr = equal_to<> > inline
+	default_searcher<_FwdIt, _Pr>
+		make_default_searcher(_FwdIt _First, _FwdIt _Last,
+			_Pr _Pred = _Pr())
+	{	// make a default_searcher
+	return (default_searcher<_FwdIt, _Pr>(_First, _Last, _Pred));
+	}
+
+	// TEMPLATE CLASS boyer_moore_searcher
+template<class _RanIt,
+	class _Hasher = hash<typename iterator_traits<_RanIt>::value_type>,
+	class _Pr = equal_to<> >
+	class boyer_moore_searcher
+	{	// searches using Boyer-Moore search
+public:
+	typedef typename iterator_traits<_RanIt>::value_type _Mappedty;
+	typedef typename iterator_traits<_RanIt>::difference_type _Diffty;
+	typedef pair<_Mappedty, _Diffty> _Mapty;
+
+	boyer_moore_searcher(_RanIt _First_pat, _RanIt _Last_pat,
+		_Hasher _Hash = _Hasher(), _Pr _Pred = _Pr())
+		: _First(_First_pat), _Last(_Last_pat),
+			_Len(_Last - _First),
+			_Mysuf(new _Diffty[_Len]),
+			_Mygood(new _Diffty[_Len]),
+			_Mybad(new _Mapty[_Len]),
+			_Myhash(_Hash)
+		{	// initialize _Mybad and _Mygood
+		if (0 < _Len)
+			{	// initialize non-empty pattern
+			for (size_t _Idx = 0; _Idx < _Len; ++_Idx)
+				_Mybad[_Idx] = _Mapty(0, _Len);
+
+			_Diffty _Bias = _Len;
+			for (_RanIt _Next = _First; _Next != _Last - 1; ++_Next)
+				{	// add element to symbol table
+				_Mapty *_It = _Find(*_Next);
+				_It->first = *_Next;	// save pattern element
+				_It->second = --_Bias;	// overwrite with latest offset
+				}
+			_Init_good();
+			}
+		}
+
+	~boyer_moore_searcher() _NOEXCEPT
+		{	// destroy the object
+		delete[] _Mysuf;
+		delete[] _Mygood;
+		delete[] _Mybad;
+		}
+
+	template<class _RanIt2>
+		pair<_RanIt2, _RanIt2> operator()(_RanIt2 _First_arg,
+			_RanIt2 _Last_arg) const
+		{	// perform Boyer-Moore search
+		typedef typename iterator_traits<_RanIt2>::difference_type _Diffty2;
+		const _Diffty2 _Nx = _Last_arg - _First_arg;
+		const _Diffty2 _Tries = _Nx - _Len;
+
+		if (_Len == 0 || _First_arg == _Last_arg)
+			return (pair<_RanIt2, _RanIt2>(
+				_First_arg, _First_arg));	// empty pattern or text
+		else if (_Tries < 0)
+			return (pair<_RanIt2, _RanIt2>(
+				_Last_arg, _Last_arg));	// pattern too large
+		else
+			{	// search for leftmost match
+			for (_Diffty2 _Jx = 0; _Jx <= _Tries; )
+				{	// try another match
+				_Diffty _Ix = _Len - 1;
+				while (0 <= _Ix && _First[_Ix] == _First_arg[_Ix + _Jx])
+					--_Ix;
+				if (_Ix < 0)
+					return (pair<_RanIt2, _RanIt2>(
+						&_First_arg[_Jx],
+						_STD next(&_First_arg[_Jx],	// match
+							_STD distance(_First_arg, _Last_arg))));
+				_Mapty *_It = _Find(_First_arg[_Jx]);
+				_Diffty _Dbad = (_It->second == _Len)
+					? -1 : _Ix - _It->second;
+				_Diffty _Dgood = _Mygood[_Ix + _Jx];
+				_Dbad = (_Dbad < _Dgood) ? _Dgood : _Dbad;
+				_Jx += (_Dbad <= 0) ? 1 : _Dbad;
+				}
+			return (pair<_RanIt2, _RanIt2>(
+				_Last_arg, _Last_arg));	// no match
+			}
+		}
+
+private:
+	_Mapty *_Find(_Mappedty _Elem) const
+		{	// find _Elem or space in hash table
+		size_t _Hashed = _Hasher()(size_t(_Elem)) % _Len;
+
+		for (size_t _Idx = 0; _Idx < _Len; ++_Idx)
+			{	// locate element or empty slot in hash table			
+			if (_Mybad[_Hashed].second == _Len
+				|| _Mybad[_Hashed].first == _Elem)
+				return (&_Mybad[_Hashed]);
+			_Hashed = (_Hashed + 1) % _Len;
+			}
+		_THROW_NCEE(logic_error, "boyer_moore hash failure");
+		}
+
+	void _Init_suf()
+		{	// initialize nonempty _Mysuf
+		_Diffty _Fx = 0;
+		_Diffty _Gx = _Len - 1;
+
+		_Mysuf[_Len - 1] = _Len;
+		for (_Diffty _Ix = _Len - 2; 0 <= _Ix; --_Ix)
+			{	// initialize _Mysuf[_Ix]
+			if (_Gx < _Ix && _Mysuf[_Ix + _Len - 1 - _Fx] < _Ix - _Gx)
+				_Mysuf[_Ix] = _Mysuf[_Ix + _Len - 1 - _Fx];
+			else
+				{
+				if (_Ix < _Gx)
+					_Gx = _Ix;
+				for (_Fx = _Ix; 0 <= _Gx
+					&& _First[_Gx] == _First[_Gx + _Len - 1 - _Fx];
+					--_Gx)
+					;
+				_Mysuf[_Ix] = _Fx - _Gx;
+				}
+			}
+		}
+
+	void _Init_good()
+		{	// initialize nonempty _Mygood
+		_Diffty _Ix, _Jx;
+
+		_Init_suf();
+		for (_Jx = 0; _Jx < _Len; ++_Jx)
+			_Mygood[_Jx] = _Len;
+		for (_Jx = 0, _Ix = _Len - 1; 0 <= _Ix; --_Ix)
+			if (_Mysuf[_Ix] == _Ix + 1)
+				for (; _Jx < _Len - 1 - _Ix; ++_Jx)
+					if (_Mygood[_Jx] == _Len)
+						_Mygood[_Jx] = _Len - 1 - _Ix;
+		for (_Ix = 0; _Ix < _Len - 1; ++_Ix)
+			_Mygood[_Len - 1 - _Mysuf[_Ix]] = _Len - 1 - _Ix;
+		}
+
+private:
+	_RanIt _First;
+	_RanIt _Last;
+	size_t _Len;
+	_Hasher _Myhash;
+	_Mapty *_Mybad;
+	_Diffty *_Mysuf;
+	_Diffty *_Mygood;
+	};
+
+	// TEMPLATE FUNCTION make_boyer_moore_searcher
+template<class _RanIt,
+	class _Hasher = hash<typename iterator_traits<_RanIt>::value_type>,
+	class _Pr = equal_to<> > inline
+	boyer_moore_searcher<_RanIt, _Hasher, _Pr>
+		make_boyer_moore_searcher(_RanIt _First, _RanIt _Last,
+			_Hasher _Hash = _Hasher(),
+			_Pr _Pred = _Pr())
+	{	// make a boyer_moore_searcher
+	return (boyer_moore_searcher<_RanIt, _Pr>(_First, _Last, _Hash, _Pred));
+	}
+
+	// TEMPLATE CLASS boyer_moore_horspool_searcher
+template<class _RanIt,
+	class _Hasher = hash<typename iterator_traits<_RanIt>::value_type>,
+	class _Pr = equal_to<> >
+	class boyer_moore_horspool_searcher
+	{	// searches using Boyer-Moore-Horspool search
+public:
+	typedef typename iterator_traits<_RanIt>::value_type _Mappedty;
+	typedef typename iterator_traits<_RanIt>::difference_type _Diffty;
+	typedef pair<_Mappedty, _Diffty> _Mapty;
+
+	boyer_moore_horspool_searcher(_RanIt _First_pat, _RanIt _Last_pat,
+		_Hasher _Hash = _Hasher(), _Pr _Pred = _Pr())
+		: _First(_First_pat), _Last(_Last_pat),
+			_Len(_Last - _First),
+			_Mybad(new _Mapty[_Len])
+		{	// initialize _Mybad
+		if (0 < _Len)
+			{	// initialize non-empty pattern
+			for (size_t _Idx = 0; _Idx < _Len; ++_Idx)
+				_Mybad[_Idx] = _Mapty(0, _Len);
+
+			_Diffty _Bias = _Len;
+			for (_RanIt _Next = _First; _Next != _Last - 1; ++_Next)
+				{	// add element to symbol table
+				_Mapty *_It = _Find(*_Next);
+				_It->first = *_Next;	// save pattern element
+				_It->second = --_Bias;	// overwrite with latest offset
+				}
+			}
+		}
+
+	~boyer_moore_horspool_searcher() _NOEXCEPT
+		{	// destroy the object
+		delete[] _Mybad;
+		}
+
+	template<class _RanIt2>
+		pair<_RanIt2, _RanIt2> operator()(_RanIt2 _First_arg,
+			_RanIt2 _Last_arg) const
+		{	// perform Boyer-Moore-Horspool search
+		typedef typename iterator_traits<_RanIt2>::difference_type _Diffty2;
+		const _Diffty2 _Nx = _Last_arg - _First_arg;
+		const _Diffty2 _Tries = _Nx - _Len;
+
+		if (_Len == 0 || _First_arg == _Last_arg)
+			return (pair<_RanIt2, _RanIt2>(
+				_First_arg, _First_arg));	// empty pattern or text
+		else if (_Tries < 0)
+			return (pair<_RanIt2, _RanIt2>(
+				_Last_arg, _Last_arg));	// pattern too large
+		else
+			{	// search for leftmost match
+			for (_Diffty2 _Jx = 0; _Jx <= _Tries; )
+				{	// try another match
+				_Diffty _Ix = _Len - 1;
+				while (0 <= _Ix && _First[_Ix] == _First_arg[_Ix + _Jx])
+					--_Ix;
+				if (_Ix < 0)
+					return (pair<_RanIt2, _RanIt2>(
+						&_First_arg[_Jx],
+						next(&_First_arg[_Jx],
+							distance(_First_arg, _Last_arg))));	// match
+				_Mapty *_It = _Find(_First_arg[_Jx]);
+				_Diffty _Dbad = (_It->second == _Len)
+					? -1 : _Ix - _It->second;
+				_Jx += (_Dbad <= 0) ? 1 : _Dbad;
+				}
+			return (pair<_RanIt2, _RanIt2>(
+				_Last_arg, _Last_arg));	// no match
+			}
+		}
+
+private:
+	_Mapty *_Find(_Mappedty _Elem) const
+		{	// find _Elem or space in hash table
+		size_t _Hashed = _Hasher()(size_t(_Elem)) % _Len;
+
+		for (size_t _Idx = 0; _Idx < _Len; ++_Idx)
+			{	// locate element or empty slot in hash table			
+			if (_Mybad[_Hashed].second == _Len
+				|| _Mybad[_Hashed].first == _Elem)
+				return (&_Mybad[_Hashed]);
+			_Hashed = (_Hashed + 1) % _Len;
+			}
+		_THROW_NCEE(logic_error, "boyer_moore_horspool hash failure");
+		}
+
+	_RanIt _First;
+	_RanIt _Last;
+	size_t _Len;
+	_Hasher _Myhash;
+	_Mapty *_Mybad;
+	};
+
+	// TEMPLATE FUNCTION make_boyer_moore_horspool_searcher
+template<class _RanIt,
+	class _Hasher = hash<typename iterator_traits<_RanIt>::value_type>,
+	class _Pr = equal_to<> > inline
+	boyer_moore_horspool_searcher<_RanIt, _Hasher, _Pr>
+		make_boyer_moore_horspool_searcher(_RanIt _First, _RanIt _Last,
+			_Hasher _Hash = _Hasher(),
+			_Pr _Pred = _Pr())
+	{	// make a boyer_moore_searcher
+	return (boyer_moore_horspool_searcher<_RanIt, _Pr>(
+		_First, _Last, _Hash, _Pred));
+	}
+_STD_END
+#endif /* _XFUNCTIONAL2_ */
+
+/*
+ * Copyright (c) by P.J. Plauger. All rights reserved.
+ * Consult your license regarding permissions and restrictions.
+ * V8.05/17:1422 */

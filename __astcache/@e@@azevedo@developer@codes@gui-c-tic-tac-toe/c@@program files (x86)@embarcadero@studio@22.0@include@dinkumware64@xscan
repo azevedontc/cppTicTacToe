@@ -1,0 +1,901 @@
+﻿// xscan internal header
+#ifndef _XSCAN_
+#define _XSCAN_
+
+ #if _HAS_CPP17
+#include <xparallel.h>
+
+ #else /* _HAS_CPP17 */
+#include <yvals.h>
+ #endif /* _HAS_CPP17 */
+
+_STD_BEGIN
+		// TEMPLATE FUNCTION swap_ranges
+template<class _FwdIt1,
+	class _FwdIt2> inline
+	_FwdIt2 _Swap_ranges(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _Dest)
+	{	// swap [_First1, _Last1) with [_Dest, ...)
+	for (; _First1 != _Last1; ++_First1, (void)++_Dest)
+		_STD iter_swap(_First1, _Dest);
+	return (_Dest);
+	}
+
+ #if _ITERATOR_DEBUG_LEVEL == 0
+template<class _FwdIt1,
+	class _FwdIt2> inline
+	_FwdIt2 swap_ranges(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _Dest)
+	{	// swap [_First1, _Last1) with [_Dest, ...)
+	return (_Swap_ranges(_Unchecked(_First1), _Unchecked(_Last1),
+		_Dest));
+	}
+
+ #else /* _ITERATOR_DEBUG_LEVEL == 0 */
+template<class _FwdIt1,
+	class _FwdIt2> inline
+	_FwdIt2 _Swap_ranges(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _Dest,
+		forward_iterator_tag, forward_iterator_tag)
+	{	// swap [_First1, _Last1) with [_Dest, ...), arbitrary iterators
+	return (_Swap_ranges(_First1, _Last1,
+		_Dest));
+	}
+
+template<class _FwdIt1,
+	class _FwdIt2> inline
+	_FwdIt2 _Swap_ranges(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _Dest,
+		random_access_iterator_tag, random_access_iterator_tag)
+	{	// swap [_First1, _Last1) with [_Dest, ...), random-access iterators
+	_FwdIt2 _Ans = _Dest + (_Last1 - _First1);  // also checks range
+	_Swap_ranges(_First1, _Last1,
+		_Unchecked(_Dest));
+	return (_Ans);
+	}
+
+template<class _FwdIt1,
+	class _FwdIt2> inline
+	_FwdIt2 _Swap_ranges(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _Dest, true_type)
+	{	// swap [_First1, _Last1) with [_Dest, ...), checked dest
+	return (_Swap_ranges(_First1, _Last1,
+		_Dest, _Iter_cat(_First1), _Iter_cat(_Dest)));
+	}
+
+template<class _FwdIt1,
+	class _FwdIt2> inline
+	_FwdIt2 _Swap_ranges(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _Dest, false_type)
+	{	// swap [_First1, _Last1) with [_Dest, ...), unchecked dest
+	return (_Swap_ranges(_First1, _Last1,
+		_Dest, _Iter_cat(_First1), _Iter_cat(_Dest)));
+	}
+
+template<class _FwdIt1,
+	class _FwdIt2> inline
+	_FwdIt2 swap_ranges(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _Dest)
+	{	// swap [_First1, _Last1) with [_Dest, ...)
+	_DEBUG_RANGE_PTR(_First1, _Last1, _Dest);
+	return (_Swap_ranges(_Unchecked(_First1), _Unchecked(_Last1),
+		_Dest, _Is_checked(_Dest)));
+	}
+
+template<class _FwdIt1,
+	class _OutTy,
+	size_t _OutSize> inline
+	_OutTy *swap_ranges(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_OutTy (&_Dest)[_OutSize])
+	{	// swap [_First1, _Last1) with [_Dest, ...), array dest
+	return (_Unchecked(
+		_STD swap_ranges(_First1, _Last1,
+		_Array_iterator<_OutTy, _OutSize>(_Dest))));
+	}
+ #endif /* _ITERATOR_DEBUG_LEVEL == 0 */
+
+ #if _HAS_CPP17
+		/* TEMPLATE CLASS _Swap_ranges_payload */
+template<class _FwdIt1, class _FwdIt2>
+	struct _Swap_ranges_payload
+		: _Payload_base_dual_range<
+			_Tiled_range<_FwdIt1>, _Tiled_range<_FwdIt2> >
+	{	// payload for parallel swap_ranges
+	typedef _Payload_base_dual_range<
+		_Tiled_range<_FwdIt1>, _Tiled_range<_FwdIt2>> _Mybase;
+	typedef _FwdIt2 _Result_type;
+	typedef typename _Mybase::_Range_type _Range_type;
+
+	_Swap_ranges_payload(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2,
+			execution::_Parallel_policy& _Exec)
+		: _Mybase(_First1, _Last1, _First2, _Exec)
+		{	// construct with iterator pair, iterator, and policy
+		}
+
+	void _Apply(_Range_type _Range)
+		{	// perform function for each element in subrange
+		_Swap_ranges(_Range._First1, _Range._Last1, _Range._First2);
+		}
+	};
+
+		/* TEMPLATE FUNCTION _Do_swap_ranges_par */
+template<class _FwdIt1,
+	class _FwdIt2> inline
+	_FwdIt2 _Do_swap_ranges_par(
+		_FwdIt1 _First1, _FwdIt1 _Last1, _FwdIt2 _First2,
+			execution::_Parallel_policy _Exec)
+	{	// perform function in parallel
+	typedef _Swap_ranges_payload<_FwdIt1, _FwdIt2> _MyPy;
+	_MyPy _Payload(_First1, _Last1, _First2, _Exec);
+	_Master_task<_MyPy> _Master(_Payload);
+	_Master._Launch();
+	return (_Master._Get());
+	}
+
+		/* TEMPLATE FUNCTION _Swap_ranges_par */
+template<class _FwdIt1,
+	class _FwdIt2> inline
+	_FwdIt2 _Swap_ranges_par(
+		_FwdIt1 _First1, _FwdIt1 _Last1, _FwdIt2 _First2,
+			execution::_Parallel_policy _Exec)
+	{	// perform function in parallel
+	_DEBUG_RANGE_PTR(_First1, _Last1, _First2);
+	return (_Rechecked(_First2,
+		_Do_swap_ranges_par(_Unchecked(_First1), _Unchecked(_Last1),
+			_Unchecked(_First2), _Exec)));
+	}
+
+template<class _FwdIt1,
+	class _FwdIt2> inline
+	_FwdIt2 _Swap_ranges_par(
+		_FwdIt1 _First, _FwdIt1 _Last, _FwdIt2 _Dest,
+			execution::sequenced_policy)
+	{	// perform function sequentially
+	_TRY_BEGIN
+		return (_STD swap_ranges(_First, _Last, _Dest));
+	_CATCH_PAR_END
+	return (_First);	// to quiet diagnostics
+	}
+
+template<class _Policy,
+	class _FwdIt1,
+	class _FwdIt2,
+	class = typename enable_if<is_execution_policy<decay_t<_Policy> >::value,
+		void>::type> inline
+	_FwdIt2 swap_ranges(_Policy&& _Exec,
+		_FwdIt1 _First1, _FwdIt1 _Last1, _FwdIt2 _Dest)
+	{	// swap [_First1, _Last1) with [_Dest, ...)
+	return (_Swap_ranges_par(_First1, _Last1, _Dest,
+		_GET_POLICY2(_First1, _Dest, _Exec)));
+	}
+ #endif /* _HAS_CPP17 */
+
+		// TEMPLATE FUNCTION lower_bound WITH PRED
+template<class _FwdIt,
+	class _Ty,
+	class _Diff,
+	class _Pr> inline
+	_FwdIt _Lower_bound(_FwdIt _First, _FwdIt _Last,
+		const _Ty& _Val, _Pr _Pred, _Diff *)
+	{	// find first element not before _Val, using _Pred
+	_Diff _Count = 0;
+	_Distance(_First, _Last, _Count);
+
+	while (0 < _Count)
+		{	// divide and conquer, find half that contains answer
+		_Diff _Count2 = _Count / 2;
+		_FwdIt _Mid = _First;
+		_STD advance(_Mid, _Count2);
+
+		if (_Pred(*_Mid, _Val))
+			{	// try top half
+			_First = ++_Mid;
+			_Count -= _Count2 + 1;
+			}
+		else
+			_Count = _Count2;
+		}
+	return (_First);
+	}
+
+template<class _FwdIt,
+	class _Ty,
+	class _Pr> inline
+	_FwdIt lower_bound(_FwdIt _First, _FwdIt _Last,
+		const _Ty& _Val, _Pr _Pred)
+	{	// find first element not before _Val, using _Pred
+	return (_Rechecked(_First,
+		_Lower_bound(_Unchecked(_First), _Unchecked(_Last), _Val, _Pred,
+			_Dist_type(_First))));
+	}
+
+		// TEMPLATE FUNCTION lower_bound
+template<class _FwdIt,
+	class _Ty> inline
+	_FwdIt lower_bound(_FwdIt _First, _FwdIt _Last, const _Ty& _Val)
+	{	// find first element not before _Val, using operator<
+	return (_STD lower_bound(_First, _Last, _Val, _FUNCTOR(less, _First)));
+	}
+
+		// TEMPLATE FUNCTION upper_bound WITH PRED
+template<class _FwdIt,
+	class _Ty,
+	class _Diff,
+	class _Pr> inline
+	_FwdIt _Upper_bound(_FwdIt _First, _FwdIt _Last,
+		const _Ty& _Val, _Pr _Pred, _Diff *)
+	{	// find first element that _Val is before, using _Pred
+	_Diff _Count = 0;
+	_Distance(_First, _Last, _Count);
+
+	while (0 < _Count)
+		{	// divide and conquer, find half that contains answer
+		_Diff _Count2 = _Count / 2;
+		_FwdIt _Mid = _First;
+		_STD advance(_Mid, _Count2);
+
+		if (!_Pred(_Val, *_Mid))
+			{	// try top half
+			_First = ++_Mid;
+			_Count -= _Count2 + 1;
+			}
+		else
+			_Count = _Count2;
+		}
+	return (_First);
+	}
+
+template<class _FwdIt,
+	class _Ty,
+	class _Pr> inline
+	_FwdIt upper_bound(_FwdIt _First, _FwdIt _Last,
+		const _Ty& _Val, _Pr _Pred)
+	{	// find first element that _Val is before, using _Pred
+	return (_Rechecked(_First,
+		_Upper_bound(_Unchecked(_First), _Unchecked(_Last), _Val, _Pred,
+			_Dist_type(_First))));
+	}
+
+		// TEMPLATE FUNCTION upper_bound
+template<class _FwdIt,
+	class _Ty> inline
+	_FwdIt upper_bound(_FwdIt _First, _FwdIt _Last, const _Ty& _Val)
+	{	// find first element that _Val is before, using operator<
+	return (_STD upper_bound(_First, _Last, _Val, _FUNCTOR(less, _First)));
+	}
+
+		// TEMPLATE FUNCTION equal_range WITH PRED
+template<class _FwdIt,
+	class _Ty,
+	class _Diff,
+	class _Pr> inline
+	pair<_FwdIt, _FwdIt>
+		_Equal_range(_FwdIt _First, _FwdIt _Last,
+			const _Ty& _Val, _Pr _Pred, _Diff *)
+	{	// find range equivalent to _Val, using _Pred
+	_Diff _Count = 0;
+	_Distance(_First, _Last, _Count);
+
+	while (0 < _Count)
+		{	// divide and conquer, check midpoint
+		_Diff _Count2 = _Count / 2;
+		_FwdIt _Mid = _First;
+		_STD advance(_Mid, _Count2);
+
+		if (_DEBUG_LT_PRED(_Pred, *_Mid, _Val))
+			{	// range begins above _Mid, loop
+			_First = ++_Mid;
+			_Count -= _Count2 + 1;
+			}
+		else if (_Pred(_Val, *_Mid))
+			_Count = _Count2;	// range in first half, loop
+		else
+			{	// range straddles _Mid, find each end and return
+			_FwdIt _First2 = _STD lower_bound(_First, _Mid, _Val, _Pred);
+			_STD advance(_First, _Count);
+			_FwdIt _Last2 = _STD upper_bound(++_Mid, _First, _Val, _Pred);
+			return (pair<_FwdIt, _FwdIt>(_First2, _Last2));
+			}
+		}
+
+	return (pair<_FwdIt, _FwdIt>(_First, _First));	// empty range
+	}
+
+template<class _FwdIt,
+	class _Ty,
+	class _Pr> inline
+	pair<_FwdIt, _FwdIt>
+		equal_range(_FwdIt _First, _FwdIt _Last,
+			const _Ty& _Val, _Pr _Pred)
+	{	// find range equivalent to _Val, using _Pred
+	pair<_UNCHECKED_TYPE(_FwdIt), _UNCHECKED_TYPE(_FwdIt)> _Ans(
+		_Equal_range(_Unchecked(_First), _Unchecked(_Last),
+			_Val, _Pred, _Dist_type(_First)));
+	return (pair<_FwdIt, _FwdIt>(
+		_Rechecked(_First, _Ans.first),
+		_Rechecked(_Last, _Ans.second)));
+	}
+
+		// TEMPLATE FUNCTION equal_range
+template<class _FwdIt,
+	class _Ty> inline
+	pair<_FwdIt, _FwdIt>
+		equal_range(_FwdIt _First, _FwdIt _Last,
+			const _Ty& _Val)
+	{	// find range equivalent to _Val, using operator<
+	return (_STD equal_range(_First, _Last, _Val, _FUNCTOR(less, _First)));
+	}
+
+ #if _HAS_CPP17
+		/* TEMPLATE CLASS _Identity_transform */
+template<class _Ty>
+	struct _Identity_transform
+	{	// transformation that maps object to itself
+	const _Ty& operator()(const _Ty& _Val)
+		{	// transform the object
+		return (_Val);
+		}
+	};
+
+		/* TEMPLATE CLASS _Scan_payload */
+template<class _FwdIt1,
+	class _FwdIt2,
+	class _Fn1,
+	class _Fn2,
+	class _Ty,
+	bool _Incl>
+	struct _Scan_payload
+		: _Payload_base_dual_range<_Tiled_range<_FwdIt1>,
+			_Tiled_range<_FwdIt2> >
+	{	// payload for parallel inclusive_scan
+	typedef _FwdIt2 _Result_type;
+	typedef _Result_type _Tile_result_type;
+	typedef _Payload_base_dual_range<
+		_Tiled_range<_FwdIt1>, _Tiled_range<_FwdIt2> > _Mybase;
+	typedef typename _Mybase::_Range_type _Range_type;
+
+	_Scan_payload(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2, _Fn1 _F1, _Fn2 _F2, _Ty _Val,
+			execution::_Parallel_policy& _Exec)
+		: _Mybase(_First1, _Last1, _First2, _Exec), _Func1(_F1), _Func2(_F2),
+		_Sum_array(_Mybase::_Ntiles, _Val), _State(_Sum)
+		{	// construct from ranges
+		}
+
+	void _Apply(_Range_type _Range)
+		{	// scan range
+		switch (_State)
+			{	// pick an operation
+			case _Sum:
+				_Do_sum(_Range);
+				break;
+
+			case _Scan:
+				if (_Incl)
+					_Do_scan_inclusive(_Range);
+				else
+					_Do_scan_exclusive(_Range);
+				break;
+
+			case _Done:
+				break;
+			}
+		}
+
+	bool _Prepare_next_pass()
+		{	// return true if there is another pass to be run
+		switch (_State)
+			{	// prepare next pass
+			case _Sum:
+				_Prepare_scan();
+				_State = _Scan;
+				break;
+
+			case _Scan:
+				_State = _Done;
+				break;
+			case _Done:
+				break;
+			}
+		return (_State != _Done);
+		}
+
+private:
+	_Fn1 _Func1;
+	_Fn2 _Func2;
+	_Dyn_array<_Ty> _Sum_array;
+	enum {_Sum, _Scan, _Done} _State;
+	void _Do_sum(_Range_type _Range)
+		{	// compute sum of tile elements for every tile except the last
+		if (_Range._Index < _Mybase::_Ntiles - 1)
+			_Sum_array[_Range._Index + 1] =
+				_Transform_sum(_Range._First1, _Range._Last1);
+		}
+
+	void _Prepare_scan()
+		{	// compute partial sum of tile sums
+		_Do_partial_sum(_Sum_array.begin(), _Sum_array.end());
+		}
+
+	void _Do_scan_inclusive(_Range_type _Range)
+		{	// compute partial sums into _Range._First2, using _Func2
+		_Ty _Acc = _Sum_array[_Range._Index];
+		for (; _Range._First1 != _Range._Last1; ++_Range._First1)
+			{	// compute another term
+			_Acc = _Func2(_Acc, _Func1(*_Range._First1));
+			*_Range._First2++ = _Acc;
+			}
+		}
+
+	void _Do_scan_exclusive(_Range_type _Range)
+		{	// compute partial sums into _Range._First2, using _Func2
+		_Do_scan_exclusive(_Range._First1, _Range._Last1, _Range._First2,
+			_Sum_array[_Range._Index]);
+		}
+
+	template<class _BidIt>
+		void _Do_scan_exclusive(_BidIt _First, _BidIt _Last, _BidIt _Dest,
+			const _Ty& _Acc)
+		{	// compute partial sums into _First2, using _Func2
+		if (_First == _Dest)
+			_Do_scan_exclusive_impl(_First, _Last, _Acc);
+		else
+			_Do_scan_exclusive_impl(_First, _Last, _Dest, _Acc);
+		}
+
+	template<class _InIt,
+		class _OutIt>
+		void _Do_scan_exclusive(_InIt _First, _InIt _Last, _OutIt _Dest,
+			const _Ty& _Acc)
+		{	// compute partial sums into _First2, using _Func2
+		_Do_scan_exclusive_impl(_First, _Last, _Dest, _Acc);
+		}
+
+	template<class _BidIt>
+		void _Do_scan_exclusive_impl(_BidIt _First, _BidIt _Last, _Ty _Acc)
+		{	// compute partial sums into input range, using _Func2
+		for (; std::next(_First) != _Last; ++_First)
+			{	// compute another term
+			_Ty _Elt = *_First;
+			*_First = _Acc;
+			_Acc = _Func2(_Acc, _Func1(_Elt));
+			}
+		*_First = _Acc;
+		}
+
+	template<class _InIt,
+		class _OutIt>
+	void _Do_scan_exclusive_impl(_InIt _First, _InIt _Last, _OutIt _Dest,
+		_Ty _Acc)
+		{	// compute partial sums into _First2, using _Func2
+		for (; std::next(_First) != _Last; ++_First)
+			{	// compute another term
+			*_Dest++ = _Acc;
+			_Acc = _Func2(_Acc, _Func1(*_First));
+			}
+		*_Dest = _Acc;
+		}
+
+	_Ty _Transform_sum(_FwdIt1 _First, _FwdIt1 _Last)
+		{	// compute transformed sums
+		_Ty _Acc = _Func1(*_First++);
+		for (; _First != _Last; ++_First)
+			_Acc = _Func2(_Acc, _Func1(*_First));
+		return (_Acc);
+		}
+
+	template<class _Iter>
+		void _Do_partial_sum(_Iter _First, _Iter _Last) const
+		{	// compute partial sums
+		_Ty _Val = *_First;
+		++_First;
+		while (_First != _Last)
+			{	// compute a sum
+			_Val = _Func2(_Val, *_First);
+			*_First++ = _Val;
+			}
+		}
+	};
+
+		/* TEMPLATE FUNCTION _Do_inclusive_scan_par */
+template<class _FwdIt1,
+	class _FwdIt2,
+	class _Fn2,
+	class _Ty>
+	_FwdIt2 _Do_inclusive_scan_par(
+		_FwdIt1 _First1, _FwdIt1 _Last1, _FwdIt2 _First2,
+			_Fn2 _Func2, _Ty _Val,
+				execution::_Parallel_policy _Exec)
+	{	// compute parallel inclusive_scan
+	typedef _Identity_transform<_Ty> _Ident;
+	typedef _Scan_payload<_FwdIt1, _FwdIt2, _Ident, _Fn2, _Ty, true> _MyPy;
+
+	_MyPy _Payload(_First1, _Last1, _First2, _Ident(), _Func2, _Val, _Exec);
+	_Master_task<_MyPy> _Master(_Payload);
+	_Master._Launch();
+	return (_Master._Get());
+	}
+
+		/* TEMPLATE FUNCTION _Do_transform_inclusive_scan_par */
+template<class _FwdIt1,
+	class _FwdIt2,
+	class _Fn1,
+	class _Ty,
+	class _Fn2>
+	_FwdIt2 _Do_transform_inclusive_scan_par(
+		_FwdIt1 _First1, _FwdIt1 _Last1, _FwdIt2 _First2,
+			_Fn1 _Func1, _Fn2 _Func2, _Ty _Val,
+				execution::_Parallel_policy _Exec)
+	{	// compute transformed parallel inclusive_scan
+	typedef _Scan_payload<_FwdIt1, _FwdIt2, _Fn1, _Fn2, _Ty, true> _MyPy;
+
+	_MyPy _Payload(_First1, _Last1, _First2, _Func1, _Func2, _Val, _Exec);
+	_Master_task<_MyPy> _Master(_Payload);
+	_Master._Launch();
+	return (_Master._Get());
+	}
+
+		/* TEMPLATE CLASS _Pack_payload */
+template<class _RanIt,
+	class _FwdIt1,
+	class _FwdIt2>
+	struct _Pack_payload
+		: _Payload_base<
+			typename std::iterator_traits<_RanIt>::difference_type>
+	{	// holds a pack
+	typedef _FwdIt2 _Result_type;
+	typedef _Result_type _Tile_result_type;
+	typedef _Payload_base<
+		typename _STD iterator_traits<_RanIt>::difference_type> _Mybase;
+	typedef typename _STD iterator_traits<_RanIt>::difference_type _Diff;
+	typedef _Triple_range<_RanIt, _FwdIt1, _FwdIt2> _Range_type;
+
+	_Pack_payload(_RanIt _First1, _RanIt _Last1,
+		_FwdIt1 _First2, _FwdIt2 _Dest,
+			execution::_Parallel_policy& _Exec)
+		: _Mybase(_Exec, _Last1 - _First1),
+			_Pred_tiles(_Mybase::_Ntiles + 1, _RanIt()),
+			_In_tiles(_Mybase::_Ntiles + 1, _FwdIt1()),
+			_Out_tiles(_Mybase::_Ntiles + 1, _FwdIt2())
+		{	// cosntruct with three ranges
+		_Make_tiles(_First1, _Last1, _First2, _Dest);
+		}
+
+	void _Apply(_Range_type _Range)
+		{	// perform function for each element in subrange
+		while (_Range._First1 != _Range._Last1)
+			{	// compute function
+			*_Range._First3++ = *_Range._First2;
+			_RanIt _Iter = _STD upper_bound(_Range._First1, _Range._Last1,
+				*_Range._First1);
+			_STD advance(_Range._First2, _Iter - _Range._First1);
+			_Range._First1 = _Iter;
+			}
+		}
+
+	_Range_type _Get_next_tile() const
+		{	// return next tile
+		int _Index = _Mybase::_Next_index();
+		if (_Mybase::_Ntiles <= _Index)
+			return (_Make_triple_range(
+				_Pred_tiles[_Mybase::_Ntiles], _Pred_tiles[_Mybase::_Ntiles],
+				_In_tiles[_Mybase::_Ntiles], _In_tiles[_Mybase::_Ntiles],
+				_Out_tiles[_Mybase::_Ntiles], _Out_tiles[_Mybase::_Ntiles],
+				_Mybase::_Ntiles));
+		else
+			return (_Make_triple_range(
+				_Pred_tiles[_Index], _Pred_tiles[_Index + 1],
+				_In_tiles[_Index], _In_tiles[_Index + 1],
+				_Out_tiles[_Index], _Out_tiles[_Index + 1],
+				_Index));
+		}
+
+	_Result_type _End() const
+		{	// return end of output range iterator
+		return (_Out_tiles[_Mybase::_Ntiles]);
+		}
+
+private:
+	_Dyn_array<_RanIt> _Pred_tiles;
+	_Dyn_array<_FwdIt1> _In_tiles;
+	_Dyn_array<_FwdIt2> _Out_tiles;
+
+	void _Make_tiles(_RanIt _First1, _RanIt _Last1,
+		_FwdIt1 _First2, _FwdIt2 _Dest)
+		{	// create iterator ranges
+		_Diff _Sz = (_Last1 - _First1) / _Mybase::_Ntiles;
+		_Pred_tiles[0] = _STD upper_bound(_First1, _Last1, 0);
+		_In_tiles[0] = _STD next(_First2, _Pred_tiles[0] - _First1);
+		_Out_tiles[0] = _Dest;
+		for (int _Idx = 1; _Idx <= _Mybase::_Ntiles; ++_Idx)
+			{	// create a tile
+			_RanIt _Iter = _Pred_tiles[_Idx - 1];
+			_Diff _Count = 0;
+			while (_Iter != _Last1 && _Iter - _Pred_tiles[_Idx - 1] < _Sz)
+				{	// skip equal elements
+				_Iter = _STD upper_bound(_Iter, _Last1, *_Iter);
+				++_Count;
+				}
+			_Pred_tiles[_Idx] = _Iter;
+			_Diff _Adv = _Iter - _Pred_tiles[_Idx - 1];
+			_In_tiles[_Idx] = _STD next(_In_tiles[_Idx - 1], _Adv);
+			_Out_tiles[_Idx] = _STD next(_Out_tiles[_Idx - 1], _Count);
+			}
+		}
+	};
+
+template<class _RanIt, class _FwdIt1, class _FwdIt2>
+	_FwdIt2 _Do_pack_par(
+		_RanIt _First1, _RanIt _Last1,
+		_FwdIt1 _First2, _FwdIt2 _Dest,
+			execution::_Parallel_policy _Exec)
+	{	// perform function in parallel
+	typedef _Pack_payload<_RanIt, _FwdIt1, _FwdIt2> _MyPy;
+	_MyPy _Payload(_First1, _Last1, _First2, _Dest, _Exec);
+	_Master_task<_MyPy> _Master(_Payload);
+	_Master._Launch();
+	return (_Master._Get());
+	}
+ #endif /* _HAS_CPP17 */
+
+		// TEMPLATE FUNCTION move
+template<class _InIt,
+	class _OutIt> inline
+	_OutIt _Move(_InIt _First, _InIt _Last,
+		_OutIt _Dest, _Nonscalar_ptr_iterator_tag)
+	{	// move [_First, _Last) to [_Dest, ...), arbitrary iterators
+	for (; _First != _Last; ++_Dest, (void)++_First)
+		*_Dest = _STD move(*_First);
+	return (_Dest);
+	}
+
+template<class _InIt,
+	class _OutIt> inline
+	_OutIt _Move(_InIt _First, _InIt _Last,
+		_OutIt _Dest, _Scalar_ptr_iterator_tag)
+	{	// move [_First, _Last) to [_Dest, ...), pointers to scalars
+	ptrdiff_t _Count = _Last - _First;
+	_CSTD memmove(&*_Dest, &*_First,
+		_Count * sizeof (*_First));
+	return (_Dest + _Count);
+	}
+
+template<class _InIt,
+	class _OutIt> inline
+	_OutIt _Move(_InIt _First, _InIt _Last,
+		_OutIt _Dest)
+	{	// move [_First, _Last) to [_Dest, ...), unchecked
+	return (_Move(_First, _Last,
+		_Dest, _Ptr_cat(_First, _Dest)));
+	}
+
+template<class _InIt,
+	class _OutIt> inline
+	_OutIt _Move(_InIt _First, _InIt _Last,
+		_OutIt _Dest, input_iterator_tag, _Mutable_iterator_tag)
+	{	// move [_First, _Last) to [_Dest, ...), arbitrary iterators
+	return (_Move(_First, _Last,
+		_Dest));
+	}
+
+template<class _InIt,
+	class _OutIt> inline
+	_OutIt _Move(_InIt _First, _InIt _Last,
+		_OutIt _Dest, random_access_iterator_tag, random_access_iterator_tag)
+	{	// move [_First, _Last) to [_Dest, ...), random-access iterators
+	_OutIt _Ans = _Dest + (_Last - _First); // also checks range
+	_Move(_First, _Last,
+		_Unchecked(_Dest));
+	return (_Ans);
+	}
+
+template<class _InIt,
+	class _OutIt> inline
+	_OutIt _Move(_InIt _First, _InIt _Last,
+		_OutIt _Dest, true_type)
+	{	// move [_First, _Last) to [_Dest, ...), checked dest
+	return (_Move(_First, _Last,
+		_Dest, _Iter_cat(_First), _Iter_cat(_Dest)));
+	}
+
+template<class _InIt,
+	class _OutIt> inline
+	_OutIt _Move(_InIt _First, _InIt _Last,
+		_OutIt _Dest, false_type)
+	{	// move [_First, _Last) to [_Dest, ...), unchecked dest
+	return (_Move(_First, _Last,
+		_Dest, _Iter_cat(_First), _Iter_cat(_Dest)));
+	}
+
+template<class _InIt,
+	class _OutIt> inline
+	_OutIt move(_InIt _First, _InIt _Last,
+		_OutIt _Dest)
+	{	// move [_First, _Last) to [_Dest, ...)
+	_DEBUG_RANGE_PTR(_First, _Last, _Dest);
+	return (_Move(_Unchecked(_First), _Unchecked(_Last),
+		_Dest, _Is_checked(_Dest)));
+	}
+
+template<class _InIt,
+	class _OutTy,
+	size_t _OutSize> inline
+	_OutTy *move(_InIt _First, _InIt _Last,
+		_OutTy (&_Dest)[_OutSize])
+	{	// move [_First, _Last) to [_Dest, ...)
+	return (_Unchecked(
+		_STD move(_First, _Last,
+			_Array_iterator<_OutTy, _OutSize>(_Dest))));
+	}
+
+ #if _HAS_CPP17
+		/* TEMPLATE CLASS _Move_payload */
+template<class _FwdIt1,
+	class _FwdIt2>
+	struct _Move_payload
+		: _Payload_base_dual_range<_Tiled_range<_FwdIt1>,
+			_Tiled_range<_FwdIt2> >
+	{	// payload for parallel move
+	typedef _FwdIt2 _Result_type;
+	typedef _Result_type _Tile_result_type;
+	typedef _Payload_base_dual_range<
+		_Tiled_range<_FwdIt1>, _Tiled_range<_FwdIt2> > _Mybase;
+	typedef typename _Mybase ::_Range_type _Range_type;
+
+	_Move_payload(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2,
+		execution::_Parallel_policy& _Exec)
+		: _Mybase(_First1, _Last1, _First2, _Exec)
+		{	// construct with iterator pair, iterator, and policy
+		}
+
+	void _Apply(_Range_type _Range)
+		{	// perform function for each element in subrange
+		_Move(_Range._First1, _Range._Last1, _Range._First2,
+			_Iter_cat(_Range._First1), _Iter_cat(_Range._First2));
+		}
+	};
+
+		/* TEMPLATE FUNCTION _Do_move_par */
+template<class _FwdIt1,
+	class _FwdIt2> inline
+	_FwdIt2 _Do_move_par(
+		_FwdIt1 _First1, _FwdIt1 _Last1, _FwdIt2 _First2,
+			execution::_Parallel_policy _Exec)
+	{	// perform function in parallel
+	typedef _Move_payload<_FwdIt1, _FwdIt2> _MyPy;
+	_MyPy _Payload(_First1, _Last1, _First2, _Exec);
+	_Master_task<_MyPy> _Master(_Payload);
+	_Master._Launch();
+	return (_Master._Get());
+	}
+
+		/* TEMPLATE FUNCTION _Move_par */
+template<class _FwdIt1,
+	class _FwdIt2> inline
+	_FwdIt2 _Move_par(
+	_FwdIt1 _First1, _FwdIt1 _Last1, _FwdIt2 _First2,
+	execution::_Parallel_policy _Exec)
+	{	// perform function in parallel
+	_DEBUG_RANGE_PTR(_First1, _Last1, _First2);
+	return (_Rechecked(_First2, _Do_move_par(_Unchecked(_First1),
+		_Unchecked(_Last1), _Unchecked(_First2), _Exec)));
+	}
+
+template<class _InIt,
+	class _OutIt> inline
+	_OutIt _Move_par(
+		_InIt _First, _InIt _Last, _OutIt _Dest,
+			execution::sequenced_policy)
+	{	// perform function sequentially
+	_TRY_BEGIN
+		return (_STD move(_First, _Last, _Dest));
+	_CATCH_PAR_END
+	return (_Dest);	// can't get here
+	}
+
+		/* TEMPLATE FUNCTION PARALLEL move */
+template<class _Policy,
+	class _InIt,
+	class _OutIt,
+	class = typename enable_if<is_execution_policy<decay_t<_Policy> >::value,
+		void>::type> inline
+	_OutIt move(_Policy&& _Exec,
+		_InIt _First, _InIt _Last, _OutIt _Dest)
+	{	// move [_First, _Last) to [_Dest, ...)
+	return (_Move_par(_First, _Last, _Dest,
+		_GET_POLICY2(_First, _Dest, _Exec)));
+	}
+
+		/* TEMPLATE FUNCTION _Do_conditional_copy */
+template<class _FwdIt1,
+	class _FwdIt2,
+	class _Pr,
+	class _Diff>
+	_FwdIt2 _Do_conditional_copy(
+		_FwdIt1 _First, _FwdIt1 _Last, _FwdIt2 _Dest,
+			_Pr _Pred, _Diff _Count, execution::_Parallel_policy _Exec)
+	{	// perform parallel copy and pack based on condition
+	typedef typename _Dyn_array<_Diff>::iterator _Iter;
+
+	_Dyn_array<_Diff> _Copies(_Count, 0);
+	_Do_transform_inclusive_scan_par(
+		_First, _Last, _Copies.begin(),
+		_Pred, _FUNCTOR(plus, _Iter), 0, _Exec);
+	return (_Do_pack_par(_Copies.begin(), _Copies.end(),
+		_First, _Dest, _Exec));
+	}
+
+template<class _FwdIt, class _Pr, class _Diff>
+	_FwdIt _Do_conditional_copy(
+		_FwdIt _First, _FwdIt _Last,
+			_Pr _Pred, _Diff _Count,
+				execution::_Parallel_policy _Exec)
+	{	// perform parallel copy and in-place pack based on condition
+	typedef typename _STD iterator_traits<_FwdIt>::value_type _Ty;
+	typedef typename _Dyn_array<_Diff>::iterator _Iter;
+
+	_Dyn_array<_Diff> _Copies(_Count, 0);
+	_Do_transform_inclusive_scan_par(
+		_First, _Last, _Copies.begin(),
+		_Pred, _FUNCTOR(plus, _Iter), 0, _Exec);
+	_Dyn_array<_Ty> _Temp(*_STD prev(_Copies.end()), _Ty());
+	_Do_pack_par(_Copies.begin(), _Copies.end(),
+		_First, _Temp.begin(), _Exec);
+	return (_Move_par(_Temp.begin(), _Temp.end(), _First, _Exec));
+	}
+ #endif /* _HAS_CPP17 */
+
+		/* TEMPLATE CLASS _Match_pred */
+template<class _Ty>
+	struct _Match_pred
+	{	// predicate for equality testing
+	_Match_pred(const _Ty& _Val_arg)
+		: _Val(_Val_arg)
+		{	// construct with value
+		}
+	bool operator()(const _Ty& _Val_arg) const
+		{	// test value
+		return (_Val_arg == _Val);
+		}
+private:
+	const _Ty& _Val;
+	};
+
+template<class _Ty>
+	_Match_pred<_Ty> _Make_match_pred(const _Ty& _Val)
+	{	// return _Match_pred<_Ty> object
+	return (_Match_pred<_Ty>(_Val));
+	}
+
+		/* TEMPLATE CLASS _Negation_pred */
+template<class _Fn1>
+	struct _Negation_pred
+	{	// predicate for negating function result
+	_Negation_pred(const _Fn1& _F1)
+		: _Func1(_F1)
+		{	// construct with function object
+		}
+
+	template<class _Ty>
+		bool operator()(const _Ty& _Val) const
+		{	// call function and negate
+		return (!_Func1(_Val));
+		}
+private:
+	_Fn1 _Func1;
+	};
+
+template<class _Fn1>
+	_Negation_pred<_Fn1> _Make_negation(const _Fn1& _F1)
+	{	// return _Negation_pred<_Fn1> object
+	return (_Negation_pred<_Fn1>(_F1));
+	}
+_STD_END
+#endif /* _XSCAN_ */
+
+/*
+ * Copyright (c) by P.J. Plauger. All rights reserved.
+ * Consult your license regarding permissions and restrictions.
+ * V8.05/17:1422 */

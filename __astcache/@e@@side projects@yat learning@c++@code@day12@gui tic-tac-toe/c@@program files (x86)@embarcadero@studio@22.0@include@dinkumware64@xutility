@@ -1,0 +1,2897 @@
+﻿// xutility internal header
+#ifndef _XUTILITY_
+#define _XUTILITY_
+#include <climits>
+#include <cstdlib>
+#include <utility>
+#include <xiter>
+#include <xscan>
+
+ _STD_BEGIN
+		// TEMPLATE FUNCTION copy
+template<class _InIt,
+	class _OutIt> inline
+	_OutIt _Copy_impl(_InIt _First, _InIt _Last,
+		_OutIt _Dest, _Nonscalar_ptr_iterator_tag)
+	{	// copy [_First, _Last) to [_Dest, ...), arbitrary iterators
+	for (; _First != _Last; ++_Dest, (void)++_First)
+		*_Dest = *_First;
+	return (_Dest);
+	}
+
+template<class _InIt,
+	class _OutIt> inline
+	_OutIt _Copy_impl(_InIt _First, _InIt _Last,
+		_OutIt _Dest, _Scalar_ptr_iterator_tag)
+	{	// copy [_First, _Last) to [_Dest, ...), pointers to scalars
+	ptrdiff_t _Count = _Last - _First;
+	_CSTD memmove(&*_Dest, &*_First,
+		_Count * sizeof (*_First));
+	return (_Dest + _Count);
+	}
+
+template<class _InIt,
+	class _OutIt> inline
+	_OutIt _Copy_impl(_InIt _First, _InIt _Last,
+		_OutIt _Dest)
+	{	// copy [_First, _Last) to [_Dest, ...)
+	return (_Copy_impl(_First, _Last,
+		_Dest, _Ptr_cat(_First, _Dest)));
+	}
+
+ #if _ITERATOR_DEBUG_LEVEL == 0
+template<class _InIt,
+	class _OutIt> inline
+	_OutIt copy(_InIt _First, _InIt _Last,
+		_OutIt _Dest)
+	{	// copy [_First, _Last) to [_Dest, ...)
+	return (_Rechecked(_Dest,
+		_Copy_impl(_Unchecked(_First), _Unchecked(_Last),
+			_Unchecked(_Dest))));
+	}
+
+ #else /* _ITERATOR_DEBUG_LEVEL == 0 */
+template<class _InIt,
+	class _OutIt> inline
+	_OutIt _Copy_impl(_InIt _First, _InIt _Last,
+		_OutIt _Dest, input_iterator_tag, _Mutable_iterator_tag)
+	{	// copy [_First, _Last) to [_Dest, ...), arbitrary iterators
+	return (_Copy_impl(_First, _Last,
+		_Dest));
+	}
+
+template<class _InIt,
+	class _OutIt> inline
+	_OutIt _Copy_impl(_InIt _First, _InIt _Last,
+		_OutIt _Dest, random_access_iterator_tag, random_access_iterator_tag)
+	{	// copy [_First, _Last) to [_Dest, ...), random-access iterators
+	_OutIt _Ans = _Dest + (_Last - _First);	// also checks range
+	_Copy_impl(_First, _Last,
+		_Unchecked(_Dest));
+	return (_Ans);
+	}
+
+template<class _InIt,
+	class _OutIt> inline
+	_OutIt _Copy_impl(_InIt _First, _InIt _Last,
+		_OutIt _Dest, true_type)
+	{	// copy [_First, _Last) to [_Dest, ...), checked dest
+	return (_Copy_impl(_First, _Last,
+		_Dest, _Iter_cat(_First), _Iter_cat(_Dest)));
+	}
+
+template<class _InIt,
+	class _OutIt> inline
+	_OutIt _Copy_impl(_InIt _First, _InIt _Last,
+		_OutIt _Dest, false_type)
+	{	// copy [_First, _Last) to [_Dest, ...), unchecked dest
+	return (_Copy_impl(_First, _Last,
+		_Dest, _Iter_cat(_First), _Iter_cat(_Dest)));
+	}
+
+template<class _InIt,
+	class _OutIt> inline
+	_OutIt copy(_InIt _First, _InIt _Last,
+		_OutIt _Dest)
+	{	// copy [_First, _Last) to [_Dest, ...)
+	_DEBUG_RANGE_PTR(_First, _Last, _Dest);
+	return (_Copy_impl(_Unchecked(_First), _Unchecked(_Last),
+		_Dest, _Is_checked(_Dest)));
+	}
+
+template<class _InIt,
+	class _OutTy,
+	size_t _OutSize> inline
+	_OutTy *copy(_InIt _First, _InIt _Last,
+		_OutTy (&_Dest)[_OutSize])
+	{	// copy [_First, _Last) to [_Dest, ...)
+	return (_Unchecked(
+		_STD copy(_First, _Last,
+			_Array_iterator<_OutTy, _OutSize>(_Dest))));
+	}
+ #endif /* _ITERATOR_DEBUG_LEVEL == 0 */
+
+ #if _HAS_CPP17
+		// TEMPLATE CLASS _Copy_payload
+template<class _FwdIt1, class _FwdIt2>
+	struct _Copy_payload
+		: _Payload_base_dual_range<_Tiled_range<_FwdIt1>,
+			_Tiled_range<_FwdIt2> >
+	{   // payload for parallel copy
+	typedef _FwdIt2 _Result_type;
+	typedef _Payload_base_dual_range<
+		_Tiled_range<_FwdIt1>, _Tiled_range<_FwdIt2> > _Mybase;
+	typedef typename _Mybase ::_Range_type _Range_type;
+
+	template<class _ItOrDiff>
+	_Copy_payload(_FwdIt1 _First1, _ItOrDiff _IorD, _FwdIt2 _First2,
+		execution::_Parallel_policy& _Exec)
+		: _Mybase(_First1, _IorD, _First2, _Exec)
+		{   // construct with iterator/iterator or size/iterator, and policy
+		}
+
+	void _Apply(_Range_type _Range)
+		{   // perform function for each element in subrange
+		_Copy_impl(_Range._First1, _Range._Last1, _Range._First2);
+		}
+	};
+
+		// TEMPLATE FUNCTION _Do_copy_par
+template<class _FwdIt1,
+	class _ItOrDiff,
+	class _FwdIt2> inline
+	_FwdIt2 _Do_copy_par(_FwdIt1 _First1, _ItOrDiff _IorD, _FwdIt2 _First2,
+		execution::_Parallel_policy _Exec)
+	{   // perform function in parallel
+	typedef _Copy_payload<_FwdIt1, _FwdIt2> _MyPy;
+	_MyPy _Payload(_First1, _IorD, _First2, _Exec);
+	_Master_task<_MyPy> _Master(_Payload);
+	_Master._Launch();
+	return (_Master._Get());
+	}
+
+		// TEMPLATE FUNCTION _Copy_par
+template<class _FwdIt1,
+	class _FwdIt2> inline
+	_FwdIt2 _Copy_par(_FwdIt1 _First1, _FwdIt1 _Last1, _FwdIt2 _First2,
+		execution::_Parallel_policy _Exec)
+	{   // perform function in parallel
+	_DEBUG_RANGE_PTR(_First1, _Last1, _First2);
+	return (_Rechecked(_First2,
+		_Do_copy_par(_Unchecked(_First1), _Unchecked(_Last1),
+		_Unchecked(_First2), _Exec)));
+	}
+
+template<class _InIt,
+	class _OutIt> inline
+	_OutIt _Copy_par(_InIt _First, _InIt _Last, _OutIt _Dest,
+		execution::sequenced_policy _Exec)
+	{	// perform function sequentially
+	_TRY_BEGIN
+		return (_STD copy(_First, _Last, _Dest));
+	_CATCH_PAR_END
+	return (_Dest);	// to quiet diagnostics
+	}
+
+template<class _Policy,
+	class _InIt,
+	class _OutIt,
+	class = enable_if_t<is_execution_policy<decay_t<_Policy> >::value,
+		void> > inline
+	_OutIt copy(_Policy&& _Exec,
+		_InIt _First, _InIt _Last, _OutIt _Dest)
+	{	// copy [_First, _Last) to [_Dest, ...)
+	return (_Copy_par(_First, _Last, _Dest,
+		_GET_POLICY2(_First, _Dest, _Exec)));
+	}
+ #endif /* _HAS_CPP17 */
+
+ #if _HAS_CPP11
+		// TEMPLATE FUNCTION copy_n
+template<class _InIt,
+	class _Diff,
+	class _OutIt> inline
+	_OutIt _Copy_n(_InIt _First, _Diff _Count,
+		_OutIt _Dest, input_iterator_tag)
+	{	// copy [_First, _First + _Count) to [_Dest, ...), input iterators
+	*_Dest = *_First;	// 0 < _Count has been guaranteed
+	while (0 < --_Count)
+		*++_Dest = *++_First;
+	return (++_Dest);
+	}
+
+template<class _InIt,
+	class _Diff,
+	class _OutIt> inline
+	_OutIt _Copy_n(_InIt _First, _Diff _Count,
+		_OutIt _Dest, forward_iterator_tag)
+	{	// copy [_First, _First + _Count) to [_Dest, ...), forward iterators
+	for (; 0 < _Count; --_Count, (void)++_Dest, ++_First)
+		*_Dest = *_First;
+	return (_Dest);
+	}
+
+template<class _InIt,
+	class _Diff,
+	class _OutIt> inline
+	_OutIt _Copy_n(_InIt _First, _Diff _Count,
+		_OutIt _Dest, _Nonscalar_ptr_iterator_tag)
+	{	// copy [_First, _First + _Count) to [_Dest, ...), arbitrary iterators
+	return (_Copy_n(_First, _Count,
+		_Dest, _Iter_cat(_First)));
+	}
+template<class _InIt,
+	class _Diff,
+	class _OutIt> inline
+	_OutIt _Copy_n(_InIt _First, _Diff _Count,
+		_OutIt _Dest, _Scalar_ptr_iterator_tag)
+	{	// copy [_First, _First + _Count) to [_Dest, ...), pointers to scalars
+	_CSTD memmove(&*_Dest, &*_First,
+		_Count * sizeof (*_First));
+	return (_Dest + _Count);
+	}
+
+template<class _InIt,
+	class _Diff,
+	class _OutIt> inline
+	_OutIt _Copy_n(_InIt _First, _Diff _Count,
+		_OutIt _Dest)
+	{	// copy [_First, _First + _Count) to [_Dest, ...), unchecked
+	return (_Copy_n(_First, _Count,
+		_Dest, _Ptr_cat(_First, _Dest)));
+	}
+
+ #if _ITERATOR_DEBUG_LEVEL == 0
+template<class _InIt,
+	class _Diff,
+	class _OutIt> inline
+	_OutIt copy_n(_InIt _First, _Diff _Count,
+		_OutIt _Dest)
+	{	// copy [_First, _First + _Count) to [_Dest, ...)
+	if (_Count <= 0)
+		return (_Dest);
+	else
+		return (_Rechecked(_Dest,
+			_Copy_n(_Unchecked(_First), _Count,
+				_Unchecked(_Dest))));
+	}
+
+ #else /* _ITERATOR_DEBUG_LEVEL == 0 */
+template<class _InIt,
+	class _Diff,
+	class _OutIt> inline
+	_OutIt _Copy_n2(_InIt _First, _Diff _Count,
+		_OutIt _Dest, _Mutable_iterator_tag)
+	{	// copy [_First, _First + _Count) to [_Dest, ...), arbitrary dest
+	return (_Copy_n(_First, _Count,
+		_Dest));
+	}
+
+template<class _InIt,
+	class _Diff,
+	class _OutIt> inline
+	_OutIt _Copy_n2(_InIt _First, _Diff _Count,
+		_OutIt _Dest, random_access_iterator_tag)
+	{	// copy [_First, _First + _Count) to [_Dest, ...), random-access dest
+	_OutIt _Ans = _Dest + _Count;	// also checks range
+	_Copy_n(_First, _Count,
+		_Unchecked(_Dest));
+	return (_Ans);
+	}
+
+template<class _InIt,
+	class _Diff,
+	class _OutIt> inline
+	_OutIt _Copy_n1(_InIt _First, _Diff _Count,
+		_OutIt _Dest, input_iterator_tag)
+	{	// copy [_First, _First + _Count) to [_Dest, ...), arbitrary input
+	return (_Copy_n2(_First, _Count,
+		_Dest, _Iter_cat(_Dest)));
+	}
+
+template<class _InIt,
+	class _Diff,
+	class _OutIt> inline
+	_OutIt _Copy_n1(_InIt _First, _Diff _Count,
+		_OutIt _Dest, random_access_iterator_tag)
+	{	// copy [_First, _First + _Count) to [_Dest, ...), random-access input
+	_InIt _Last = _First + _Count;	// also checks range
+	_Last = _Last;	// to quiet diagnostics
+	return (_Copy_n2(_Unchecked(_First), _Count,
+		_Dest, _Iter_cat(_Dest)));
+	}
+
+template<class _InIt,
+	class _Diff,
+	class _OutIt> inline
+	_OutIt _Copy_n(_InIt _First, _Diff _Count,
+		_OutIt _Dest, true_type)
+	{	// copy [_First, _First + _Count) to [_Dest, ...), checked dest
+	return (_Copy_n1(_First, _Count,
+		_Dest, _Iter_cat(_First)));
+	}
+
+template<class _InIt,
+	class _Diff,
+	class _OutIt> inline
+	_OutIt _Copy_n(_InIt _First, _Diff _Count,
+		_OutIt _Dest, false_type)
+	{	// copy [_First, _First + _Count) to [_Dest, ...), unchecked dest
+	return (_Copy_n1(_First, _Count,
+		_Dest, _Iter_cat(_First)));
+	}
+
+template<class _InIt,
+	class _Diff,
+	class _OutIt> inline
+	_OutIt copy_n(_InIt _First, _Diff _Count,
+		_OutIt _Dest)
+	{	// copy [_First, _First + _Count) to [_Dest, ...)
+	if (_Count <= 0)
+		return (_Dest);
+	else
+		{	// validate parameters and copy
+		_DEBUG_POINTER(_First);
+		_DEBUG_POINTER(_Dest);
+		return (_Copy_n(_First, _Count,
+			_Dest, _Is_checked(_Dest)));
+		}
+	}
+
+template<class _InTy,
+	size_t _InSize,
+	class _Diff,
+	class _OutIt> inline
+	_OutIt copy_n(_InTy (&_First)[_InSize], _Diff _Count,
+		_OutIt _Dest)
+	{	// copy [_First, _First + _Count) to [_Dest, ...), array input
+	return (_STD copy_n(_Array_iterator<_InTy, _InSize>(_First), _Count,
+		_Dest));
+	}
+
+template<class _InIt,
+	class _Diff,
+	class _OutTy,
+	size_t _OutSize> inline
+	_OutTy *copy_n(_InIt _First, _Diff _Count,
+		_OutTy (&_Dest)[_OutSize])
+	{	// copy [_First, _First + _Count) to [_Dest, ...), array dest
+	return (_Unchecked(
+		_STD copy_n(_First, _Count,
+			_Array_iterator<_OutTy, _OutSize>(_Dest))));
+	}
+
+template<class _InTy,
+	size_t _InSize,
+	class _Diff,
+	class _OutTy,
+	size_t _OutSize> inline
+	_OutTy *copy_n(_InTy (&_First)[_InSize], _Diff _Count,
+		_OutTy (&_Dest)[_OutSize])
+	{	// copy [_First, _First + _Count) to [_Dest, ...), array input/dest
+	return (_Unchecked(
+		_STD copy_n(_Array_iterator<_InTy, _InSize>(_First), _Count,
+			_Array_iterator<_OutTy, _OutSize>(_Dest))));
+	}
+ #endif /* _ITERATOR_DEBUG_LEVEL == 0 */
+
+ #endif /* _HAS_CPP11 */
+
+ #if _HAS_CPP17
+		// TEMPLATE FUNCTION _Copy_n_par
+template <class _RanIt1,
+	class _Diff,
+	class _RanIt2> inline
+	_RanIt2 _Copy_n_par(
+		_RanIt1 _First1, _Diff _Count, _RanIt2 _First2,
+			execution::_Parallel_policy _Exec)
+	{   // perform function in parallel
+	return (_Do_copy_par(_First1, _Count, _First2, _Exec));
+	}
+
+template <class _InIt,
+	class _Diff,
+	class _OutIt> inline
+	_OutIt _Copy_n_par(
+		_InIt _First, _Diff _Count, _OutIt _Dest,
+			execution::sequenced_policy _Exec)
+	{	// perform function sequentially
+	_TRY_BEGIN
+		return (_STD copy_n(_First, _Count, _Dest));
+	_CATCH_PAR_END
+	return (_Dest);	// to quiet diagnostics
+	}
+
+template<class _Policy,
+	class _InIt,
+	class _Diff,
+	class _OutIt,
+	class = enable_if_t<is_execution_policy<decay_t<_Policy> >::value,
+		void> > inline
+	_OutIt copy_n(_Policy&& _Exec,
+		_InIt _First, _Diff _Count, _OutIt _Dest)
+	{	// copy [_First, _First + _Count) to [_Dest, ...)
+	return (_Copy_n_par(_First, _Count, _Dest,
+		_GET_POLICY2(_First, _Dest, _Exec)));
+	}
+ #endif /* _HAS_CPP17 */
+
+		// TEMPLATE FUNCTION copy_backward
+template<class _BidIt1,
+	class _BidIt2> inline
+	_BidIt2 _Copy_backward(_BidIt1 _First, _BidIt1 _Last,
+		_BidIt2 _Dest, _Nonscalar_ptr_iterator_tag)
+	{	// copy [_First, _Last) backwards to [..., _Dest), arbitrary iterators
+	while (_First != _Last)
+		*--_Dest = *--_Last;
+	return (_Dest);
+	}
+
+template<class _InIt,
+	class _OutIt> inline
+	_OutIt _Copy_backward(_InIt _First, _InIt _Last,
+		_OutIt _Dest, _Scalar_ptr_iterator_tag)
+	{	// copy [_First, _Last) backwards to [..., _Dest), pointers to scalars
+	ptrdiff_t _Count = _Last - _First;
+	_CSTD memmove(&*_Dest - _Count, &*_First,
+		_Count * sizeof (*_First));
+	return (_Dest - _Count);
+	}
+
+template<class _BidIt1,
+	class _BidIt2> inline
+	_BidIt2 _Copy_backward(_BidIt1 _First, _BidIt1 _Last,
+		_BidIt2 _Dest)
+	{	// copy [_First, _Last) backwards to [..., _Dest), unchecked
+	return (_Copy_backward(_First, _Last,
+		_Dest, _Ptr_cat(_First, _Dest)));
+	}
+
+ #if _ITERATOR_DEBUG_LEVEL == 0
+template<class _BidIt1,
+	class _BidIt2> inline
+	_BidIt2 copy_backward(_BidIt1 _First, _BidIt1 _Last,
+		_BidIt2 _Dest)
+	{	// copy [_First, _Last) backwards to [..., _Dest)
+	return (_Rechecked(_Dest,
+		_Copy_backward(_Unchecked(_First), _Unchecked(_Last),
+			_Unchecked(_Dest))));
+	}
+
+ #else /* _ITERATOR_DEBUG_LEVEL == 0 */
+template<class _BidIt1,
+	class _BidIt2> inline
+	_BidIt2 _Copy_backward(_BidIt1 _First, _BidIt1 _Last,
+		_BidIt2 _Dest, true_type)
+	{	// copy [_First, _Last) backwards to [..., _Dest), checked dest
+	return (_Copy_backward(_Unchecked(_First), _Unchecked(_Last),
+		_Dest));
+	}
+
+template<class _BidIt1,
+	class _BidIt2> inline
+	_BidIt2 _Copy_backward(_BidIt1 _First, _BidIt1 _Last,
+		_BidIt2 _Dest, false_type)
+	{	// copy [_First, _Last) backwards to [..., _Dest), unchecked dest
+	return (_Copy_backward(_Unchecked(_First), _Unchecked(_Last),
+		_Dest));
+	}
+
+template<class _BidIt1,
+	class _BidIt2> inline
+	_BidIt2 copy_backward(_BidIt1 _First, _BidIt1 _Last,
+		_BidIt2 _Dest)
+	{	// copy [_First, _Last) backwards to [..., _Dest)
+	_DEBUG_RANGE_PTR(_First, _Last, _Dest);
+	return (_Copy_backward(_Unchecked(_First), _Unchecked(_Last),
+		_Dest, _Is_checked(_Dest)));
+	}
+ #endif /* _ITERATOR_DEBUG_LEVEL == 0 */
+
+		// TEMPLATE FUNCTION move_backward
+template<class _BidIt1,
+	class _BidIt2> inline
+	_BidIt2 _Move_backward(_BidIt1 _First, _BidIt1 _Last,
+		_BidIt2 _Dest, _Nonscalar_ptr_iterator_tag)
+	{	// move [_First, _Last) backwards to [..., _Dest), arbitrary iterators
+	while (_First != _Last)
+		*--_Dest = _STD move(*--_Last);
+	return (_Dest);
+	}
+
+template<class _InIt,
+	class _OutIt> inline
+	_OutIt _Move_backward(_InIt _First, _InIt _Last,
+		_OutIt _Dest, _Scalar_ptr_iterator_tag)
+	{	// move [_First, _Last) backwards to [..., _Dest), pointers to scalars
+	ptrdiff_t _Count = _Last - _First;
+	_CSTD memmove(&*_Dest - _Count, &*_First,
+		_Count * sizeof (*_First));
+	return (_Dest - _Count);
+	}
+
+template<class _BidIt1,
+	class _BidIt2> inline
+	_BidIt2 _Move_backward(_BidIt1 _First, _BidIt1 _Last,
+		_BidIt2 _Dest)
+	{	// move [_First, _Last) backwards to [..., _Dest), unchecked
+	return (_Move_backward(_First, _Last,
+		_Dest, _Ptr_cat(_First, _Dest)));
+	}
+
+ #if _ITERATOR_DEBUG_LEVEL == 0
+template<class _BidIt1,
+	class _BidIt2> inline
+	_BidIt2 move_backward(_BidIt1 _First, _BidIt1 _Last,
+		_BidIt2 _Dest)
+	{	// move [_First, _Last) backwards to [..., _Dest)
+	return (_Rechecked(_Dest,
+		_Move_backward(_Unchecked(_First), _Unchecked(_Last),
+			_Unchecked(_Dest))));
+	}
+
+ #else /* _ITERATOR_DEBUG_LEVEL == 0 */
+template<class _BidIt1,
+	class _BidIt2> inline
+	_BidIt2 _Move_backward(_BidIt1 _First, _BidIt1 _Last,
+		_BidIt2 _Dest, true_type)
+	{	// move [_First, _Last) backwards to [..., _Dest), checked dest
+	return (_Move_backward(_Unchecked(_First), _Unchecked(_Last),
+		_Dest));
+	}
+
+template<class _BidIt1,
+	class _BidIt2> inline
+	_BidIt2 _Move_backward(_BidIt1 _First, _BidIt1 _Last,
+		_BidIt2 _Dest, false_type)
+	{	// move [_First, _Last) backwards to [..., _Dest), unchecked dest
+	return (_Move_backward(_Unchecked(_First), _Unchecked(_Last),
+		_Dest));
+	}
+
+template<class _BidIt1,
+	class _BidIt2> inline
+	_BidIt2 move_backward(_BidIt1 _First, _BidIt1 _Last,
+		_BidIt2 _Dest)
+	{	// move [_First, _Last) backwards to [..., _Dest)
+	_DEBUG_RANGE_PTR(_First, _Last, _Dest);
+	return (_Move_backward(_Unchecked(_First), _Unchecked(_Last),
+		_Dest, _Is_checked(_Dest)));
+	}
+ #endif /* _ITERATOR_DEBUG_LEVEL == 0 */
+
+		// TEMPLATE FUNCTION fill
+template<class _FwdIt,
+	class _Ty> inline
+	void _Fill(_FwdIt _First, _FwdIt _Last, const _Ty& _Val)
+	{	// copy _Val through [_First, _Last)
+	for (; _First != _Last; ++_First)
+		*_First = _Val;
+	}
+
+inline void _Fill(char *_First, char *_Last, char _Val)
+	{	// copy char _Val through [_First, _Last)
+	_CSTD memset(_First, _Val, _Last - _First);
+	}
+
+inline void _Fill(signed char *_First, signed char *_Last, signed char _Val)
+	{	// copy signed char _Val through [_First, _Last)
+	_CSTD memset(_First, _Val, _Last - _First);
+	}
+
+inline void _Fill(unsigned char *_First, unsigned char *_Last, unsigned char _Val)
+	{	// copy unsigned char _Val through [_First, _Last)
+	_CSTD memset(_First, _Val, _Last - _First);
+	}
+
+template<class _FwdIt,
+	class _Ty> inline
+	void fill(_FwdIt _First, _FwdIt _Last, const _Ty& _Val)
+	{	// copy _Val through [_First, _Last)
+	_DEBUG_RANGE(_First, _Last);
+	_Fill(_Unchecked(_First), _Unchecked(_Last), _Val);
+	}
+
+ #if _HAS_CPP17
+		// TEMPLATE CLASS _Fill_payload
+template <class _FwdIt,
+	class _Ty>
+	struct _Fill_payload
+		: _Payload_base_single_range<_Tiled_range<_FwdIt> >
+	{	// payload for parallel fill
+	typedef _FwdIt _Result_type;
+	typedef _Result_type _Tile_result_type;
+	typedef _Payload_base_single_range< _Tiled_range<_FwdIt> > _Mybase;
+	typedef typename _Mybase::_Range_type _Range_type;
+
+	template <class _ItOrDiff>
+		_Fill_payload(_FwdIt _First, _ItOrDiff _IorD, const _Ty& _Val_arg,
+			execution::_Parallel_policy& _Exec)
+		: _Mybase(_First, _IorD, _Exec), _Val(_Val_arg)
+		{	// construct with iterator, iterator or size, value, and policy
+		}
+
+	void _Apply(_Range_type _Rty)
+		{	// perform function for each element in subrange
+		_Fill(_Rty._First, _Rty._Last, _Val);
+		}
+
+	const _Ty& _Val;
+	};
+
+		// TEMPLATE FUNCTION _Do_fill_par
+template <class _FwdIt,
+	class _ItOrDiff,
+	class _Ty> inline
+	_FwdIt _Do_fill_par(
+		_FwdIt _First, _ItOrDiff _IorD, const _Ty& _Val,
+			execution::_Parallel_policy _Exec)
+	{	// perform function in parallel
+	typedef _Fill_payload<_FwdIt, _Ty> _MyPy;
+	_MyPy _Payload(_First, _IorD, _Val, _Exec);
+	_Master_task<_MyPy> _Master(_Payload);
+	_Master._Launch();
+	return (_Master._Get());
+	}
+
+		// TEMPLATE FUNCTION _Fill_par
+template <class _FwdIt,
+	class _Ty> inline
+	void _Fill_par(
+		_FwdIt _First, _FwdIt _Last, const _Ty& _Val,
+		execution::_Parallel_policy _Exec)
+	{	// perform function in parallel
+	typedef _Fill_payload<_FwdIt, _Ty> _MyPy;
+	_DEBUG_RANGE(_First, _Last);
+	_Do_fill_par(_Unchecked(_First), _Unchecked(_Last), _Val, _Exec);
+	}
+
+template <class _InIt,
+	class _Ty> inline
+	void _Fill_par(
+	_InIt _First, _InIt _Last, const _Ty& _Val,
+		execution::sequenced_policy)
+	{	// perform function sequentially
+	_TRY_BEGIN
+		_STD fill(_First, _Last, _Val);
+	_CATCH_PAR_END
+	}
+
+template<class _Policy,
+	class _FwdIt,
+	class _Ty,
+	class = enable_if_t<is_execution_policy<decay_t<_Policy> >::value,
+		void> > inline
+	void fill(_Policy&& _Exec,
+		_FwdIt _First, _FwdIt _Last, const _Ty& _Val)
+	{	// copy _Val through [_First, _Last)
+	return (_Fill_par(_First, _Last, _Val,
+		_GET_POLICY(_First, _Exec)));
+	}
+ #endif /* _HAS_CPP17 */
+
+		// TEMPLATE FUNCTION fill_n
+template<class _OutIt,
+	class _Diff,
+	class _Ty> inline
+	_OutIt _Fill_n(_OutIt _Dest, _Diff _Count, const _Ty& _Val)
+	{	// copy _Val _Count times through [_Dest, ...)
+	for (; 0 < _Count; --_Count, (void)++_Dest)
+		*_Dest = _Val;
+	return (_Dest);
+	}
+
+inline char *_Fill_n(char *_Dest, size_t _Count, char _Val)
+	{	// copy char _Val _Count times through [_Dest, ...)
+	_CSTD memset(_Dest, _Val, _Count);
+	return (_Dest + _Count);
+	}
+
+inline signed char *_Fill_n(signed char *_Dest, size_t _Count,
+	signed char _Val)
+	{	// copy signed char _Val _Count times through [_Dest, ...)
+	_CSTD memset(_Dest, _Val, _Count);
+	return (_Dest + _Count);
+	}
+
+inline unsigned char *_Fill_n(unsigned char *_Dest, size_t _Count,
+	unsigned char _Val)
+	{	// copy unsigned char _Val _Count times through [_Dest, ...)
+	_CSTD memset(_Dest, _Val, _Count);
+	return (_Dest + _Count);
+	}
+
+ #if _ITERATOR_DEBUG_LEVEL == 0
+template<class _OutIt,
+	class _Diff,
+	class _Ty> inline
+	_OutIt fill_n(_OutIt _Dest, _Diff _Count, const _Ty& _Val)
+	{	// copy _Val _Count times through [_Dest, ...)
+	return (_Rechecked(_Dest, _Fill_n(_Unchecked(_Dest), _Count, _Val)));
+	}
+
+ #else /* _ITERATOR_DEBUG_LEVEL == 0 */
+template<class _OutIt,
+	class _Diff,
+	class _Ty> inline
+	_OutIt _Fill_n1(_OutIt _Dest, _Diff _Count, const _Ty& _Val,
+		_Mutable_iterator_tag)
+	{	// copy _Val _Count times through [_Dest, ...), arbitrary iterator
+	return (_Fill_n(_Dest, _Count, _Val));
+	}
+
+template<class _OutIt,
+	class _Diff,
+	class _Ty> inline
+	_OutIt _Fill_n1(_OutIt _Dest, _Diff _Count, const _Ty& _Val,
+		random_access_iterator_tag)
+	{	// copy _Val _Count times through [_Dest, ...), random-access iterator
+	_OutIt _Ans = _Dest + _Count;	// also checks range
+	_Fill_n(_Unchecked(_Dest), _Count, _Val);
+	return (_Ans);
+	}
+
+template<class _OutIt,
+	class _Diff,
+	class _Ty> inline
+	_OutIt _Fill_n(_OutIt _Dest, _Diff _Count, const _Ty& _Val,
+		true_type)
+	{	// copy _Val _Count times through [_Dest, ...), checked dest
+	return (_Fill_n1(_Dest, _Count, _Val,
+		_Iter_cat(_Dest)));
+	}
+
+template<class _OutIt,
+	class _Diff,
+	class _Ty> inline
+	_OutIt _Fill_n(_OutIt _Dest, _Diff _Count, const _Ty& _Val,
+		false_type)
+	{	// copy _Val _Count times through [_Dest, ...), unchecked dest
+	return (_Fill_n1(_Dest, _Count, _Val,
+		_Iter_cat(_Dest)));
+	}
+
+template<class _OutIt,
+	class _Diff,
+	class _Ty> inline
+	_OutIt fill_n(_OutIt _Dest, _Diff _Count, const _Ty& _Val)
+	{	// copy _Val _Count times through [_Dest, ...)
+	_DEBUG_POINTER_IF(0 < _Count, _Dest);
+	return (_Fill_n(_Dest, _Count, _Val,
+		_Is_checked(_Dest)));
+	}
+
+template<class _OutTy,
+	size_t _OutSize,
+	class _Diff,
+	class _Ty> inline
+	_OutTy *fill_n(_OutTy (&_Dest)[_OutSize], _Diff _Count, const _Ty& _Val)
+	{	// copy _Val _Count times through [_Dest, ...)
+	return (_Unchecked(_STD fill_n(_Array_iterator<_OutTy, _OutSize>(_Dest),
+		_Count, _Val)));
+	}
+ #endif /* _ITERATOR_DEBUG_LEVEL == 0 */
+
+ #if _HAS_CPP17
+		// TEMPLATE FUNCTION _Fill_n_par
+template <class _RanIt,
+	class _Diff,
+	class _Ty> inline
+	_RanIt _Fill_n_par(_RanIt _First, _Diff _Count, const _Ty& _Val,
+		execution::_Parallel_policy _Exec)
+	{	// perform function in parallel
+	_DEBUG_POINTER_IF(0 < _Count, _First);
+	return (_Do_fill_par(_First, _Count, _Val, _Exec));
+	}
+
+template <class _InIt,
+	class _Diff,
+	class _Ty> inline
+	_InIt _Fill_n_par(
+		_InIt _Dest, _Diff _Count, const _Ty& _Val,
+			execution::sequenced_policy)
+	{	// perform function sequentially
+	_TRY_BEGIN
+		return (_STD fill_n(_Dest, _Count, _Val));
+	_CATCH_PAR_END
+	return (_Dest);	// to quiet diagnostics
+	}
+
+template<class _Policy,
+	class _OutIt,
+	class _Diff,
+	class _Ty,
+	class = enable_if_t<is_execution_policy<decay_t<_Policy> >::value,
+		void> > inline
+	_OutIt fill_n(_Policy&& _Exec,
+		_OutIt _Dest, _Diff _Count, const _Ty& _Val)
+	{	// copy _Val _Count times through [_Dest, ...)
+	return (_Fill_n_par(_Dest, _Count, _Val,
+		_GET_POLICY(_Dest, _Exec)));
+	}
+ #endif /* _HAS_CPP17 */
+
+		// TEMPLATE FUNCTION equal WITH PRED
+template<class _InIt1,
+	class _InIt2,
+	class _Pr> inline
+	bool _Equal(_InIt1 _First1, _InIt1 _Last1,
+		_InIt2 _First2, _Pr _Pred)
+	{	// compare [_First1, _Last1) to [_First2, ...) using _Pred
+	for (; _First1 != _Last1; ++_First1, (void)++_First2)
+		if (!_Pred(*_First1, *_First2))
+			return (false);
+	return (true);
+	}
+
+ #if _HAS_CPP11
+inline bool _Equal(const char *_First1, const char *_Last1,
+	const char *_First2, equal_to<>)
+	{	// compare [_First1, _Last1) to [_First2, ...), for chars
+	return (_CSTD memcmp(_First1, _First2, _Last1 - _First1) == 0);
+	}
+
+inline bool _Equal(const signed char *_First1, const signed char *_Last1,
+	const signed char *_First2, equal_to<>)
+	{	// compare [_First1, _Last1) to [_First2, ...), for signed chars
+	return (_CSTD memcmp(_First1, _First2, _Last1 - _First1) == 0);
+	}
+
+inline bool _Equal(const unsigned char *_First1, const unsigned char *_Last1,
+	const unsigned char *_First2, equal_to<>)
+	{	// compare [_First1, _Last1) to [_First2, ...), for unsigned chars
+	return (_CSTD memcmp(_First1, _First2, _Last1 - _First1) == 0);
+	}
+ #endif /* _HAS_CPP11 */
+
+ #if _ITERATOR_DEBUG_LEVEL == 0
+template<class _InIt1,
+	class _InIt2,
+	class _Pr> inline
+	bool equal(_InIt1 _First1, _InIt1 _Last1,
+		_InIt2 _First2, _Pr _Pred)
+	{	// compare [_First1, _Last1) to [_First2, ...) using _Pred
+	return (_Equal(_Unchecked(_First1), _Unchecked(_Last1),
+		_Unchecked(_First2), _Pred));
+	}
+
+ #else /* _ITERATOR_DEBUG_LEVEL == 0 */
+template<class _InIt1,
+	class _InIt2,
+	class _Pr> inline
+	bool _Equal2(_InIt1 _First1, _InIt1 _Last1,
+		_InIt2 _First2, _Pr _Pred, true_type)
+	{	// compare [_First1, _Last1) to [_First2, ...) using _Pred, checked
+	return (_Equal(_First1, _Last1,
+		_First2, _Pred));
+	}
+
+template<class _InIt1,
+	class _InIt2,
+	class _Pr> inline
+	bool _Equal2(_InIt1 _First1, _InIt1 _Last1,
+		_InIt2 _First2, _Pr _Pred, false_type)
+	{	// compare [_First1, _Last1) to [_First2, ...) using _Pred, unchecked
+	return (_Equal(_First1, _Last1,
+		_First2, _Pred));
+	}
+
+template<class _InIt1,
+	class _InIt2,
+	class _Pr> inline
+	bool equal(_InIt1 _First1, _InIt1 _Last1,
+		_InIt2 _First2, _Pr _Pred)
+	{	// compare [_First1, _Last1) to [_First2, ...) using _Pred
+	_DEBUG_RANGE_PTR(_First1, _Last1, _First2);
+	_DEBUG_POINTER_IF(_First1 != _Last1, _Pred);
+	return (_Equal2(_Unchecked(_First1), _Unchecked(_Last1),
+		_First2, _Pred, _Is_checked(_First2)));
+	}
+
+ #if _ITERATOR_DEBUG_ARRAY_OVERLOADS
+template<class _InIt1,
+	class _InTy,
+	size_t _InSize,
+	class _Pr> inline
+	bool equal(_InIt1 _First1, _InIt1 _Last1,
+		_InTy (&_First2)[_InSize], _Pr _Pred)
+	{	// compare [_First1, _Last1) to [_First2, ...) using _Pred
+	return (_STD equal(_First1, _Last1,
+		_Array_iterator<_InTy, _InSize>(_First2), _Pred));
+	}
+ #endif /* _ITERATOR_DEBUG_ARRAY_OVERLOADS */
+
+ #endif /* _ITERATOR_DEBUG_LEVEL == 0 */
+
+		// TEMPLATE FUNCTION equal
+template<class _InIt1,
+	class _InIt2> inline
+	bool equal(_InIt1 _First1, _InIt1 _Last1,
+		_InIt2 _First2)
+	{	// compare [_First1, _Last1) to [_First2, ...)
+	return (_STD equal(_First1, _Last1, _First2,
+		_FUNCTOR(equal_to, _First1)));
+	}
+
+template<class _InIt1,
+	class _InTy,
+	size_t _InSize> inline
+	bool equal(_InIt1 _First1, _InIt1 _Last1,
+		_InTy (&_First2)[_InSize])
+	{	// compare [_First1, _Last1) to [_First2, ...)
+	return (_STD equal(_First1, _Last1, _First2,
+		_FUNCTOR(equal_to, _First1)));
+	}
+
+		// TEMPLATE FUNCTION equal WITH TWO RANGES, PRED
+template<class _InIt1,
+	class _InIt2,
+	class _Pr> inline
+	bool _Equal(_InIt1 _First1, _InIt1 _Last1,
+		_InIt2 _First2, _InIt2 _Last2, _Pr _Pred,
+			input_iterator_tag, input_iterator_tag)
+	{	// compare [_First1, _Last1) to [_First2, _Last2)
+		// using _Pred, arbitrary iterators
+	_DEBUG_POINTER_IF(_First1 != _Last1 && _First2 != _Last2, _Pred);
+	for (; _First1 != _Last1 && _First2 != _Last2; ++_First1, (void)++_First2)
+		if (!_Pred(*_First1, *_First2))
+			return (false);
+	return (_First1 == _Last1 && _First2 == _Last2);
+	}
+
+template<class _InIt1,
+	class _InIt2,
+	class _Pr> inline
+	bool _Equal(_InIt1 _First1, _InIt1 _Last1,
+		_InIt2 _First2, _InIt2 _Last2, _Pr _Pred,
+			random_access_iterator_tag, random_access_iterator_tag)
+	{	// compare [_First1, _Last1) to [_First2, _Last2)
+		// using _Pred, random-access iterators
+	if (_Last1 - _First1 != _Last2 - _First2)
+		return (false);
+	_DEBUG_POINTER_IF(_First1 != _Last1, _Pred);
+	return (_Equal(_First1, _Last1, _First2, _Pred));
+	}
+
+template<class _InIt1,
+	class _InIt2,
+	class _Pr> inline
+	bool equal(_InIt1 _First1, _InIt1 _Last1,
+		_InIt2 _First2, _InIt2 _Last2, _Pr _Pred)
+	{	// compare [_First1, _Last1) to [_First2, _Last2) using _Pred
+	_DEBUG_RANGE(_First1, _Last1);
+	_DEBUG_RANGE(_First2, _Last2);
+	return (_Equal(_Unchecked(_First1), _Unchecked(_Last1),
+		_Unchecked(_First2), _Unchecked(_Last2), _Pred,
+			_Iter_cat(_First1), _Iter_cat(_First2)));
+	}
+
+		// TEMPLATE FUNCTION equal WITH TWO RANGES
+template<class _InIt1,
+	class _InIt2> inline
+	bool equal(_InIt1 _First1, _InIt1 _Last1,
+		_InIt2 _First2, _InIt2 _Last2)
+	{	// compare [_First1, _Last1) to [_First2, _Last2)
+	return (_STD equal(_First1, _Last1, _First2, _Last2,
+		_FUNCTOR(equal_to, _First1)));
+	}
+
+ #if _HAS_CPP17
+		// TEMPLATE CLASS _Equal_payload
+template <class _FwdIt1,
+	class _FwdIt2,
+	class _Pr>
+	struct _Equal_payload
+		: _Payload_base_dual_range<
+			_Tiled_range<_FwdIt1>, _Tiled_range<_FwdIt2> >,
+	_Init_value_helper<bool>
+	{   // payload for parallel equal
+	typedef bool _Result_type;
+	typedef _Result_type _Tile_result_type;
+	typedef _Payload_base_dual_range<
+		_Tiled_range<_FwdIt1>, _Tiled_range<_FwdIt2> > _Mybase;
+	typedef typename _Mybase::_Range_type _Range_type;
+
+	template <class _ItOrDiff>
+		_Equal_payload(_FwdIt1 _First1, _ItOrDiff _IorD,
+			_FwdIt2 _First2, _Pr _Pr_arg,
+				execution::_Parallel_policy& _Exec)
+		: _Mybase(_First1, _IorD, _First2, _Exec),
+		_Init_value_helper<bool>(true),
+		_Pred(_Pr_arg)
+		{   // construct with iterator pair, iterator, predicate, and policy
+		}
+
+	_Tile_result_type _Apply(_Range_type _Ran, _Tile_result_type _Previous)
+		{	// perform function for each element in subrange
+		_Tile_result_type _Res =
+			_Equal(_Ran._First1, _Ran._Last1, _Ran._First2, _Pred);
+		return (this->_Maybe_short_circuit(_Res, true, _Previous));
+		}
+
+	static _Tile_result_type
+		_Reduce(_Tile_result_type _Lhs, _Tile_result_type _Rhs)
+		{   // combine values from subranges
+		return (_Lhs && _Rhs);
+		}
+
+	_Result_type _Get(_Tile_result_type _Res) const
+		{   // extract result
+		return _Res;
+		}
+
+	_Pr _Pred;
+	};
+
+		// TEMPLATE FUNCTION _Do_equal_par
+template <class _FwdIt1,
+	class _ItOrDiff,
+	class _FwdIt2,
+	class _Pr> inline
+	bool _Do_equal_par(
+		_FwdIt1 _First1, _ItOrDiff _IorD, _FwdIt2 _First2, _Pr _Pred,
+			execution::_Parallel_policy _Exec)
+	{	// perform function in parallel
+	typedef _Equal_payload<_FwdIt1, _FwdIt2, _Pr> _MyPy;
+	_MyPy _Payload(_First1, _IorD, _First2, _Pred, _Exec);
+	_Master_task_with_result<_MyPy> _Master(_Payload);
+	_Master._Launch();
+	return (_Master._Get());
+	}
+
+		// TEMPLATE FUNCTION _Equal_par
+template <class _FwdIt1,
+	class _FwdIt2,
+	class _Pr> inline
+	bool _Equal_par(
+		_FwdIt1 _First1, _FwdIt1 _Last1, _FwdIt2 _First2, _Pr _Pred,
+			execution::_Parallel_policy _Exec)
+	{	// perform function in parallel
+	_DEBUG_RANGE(_First1, _Last1);
+	return (_Do_equal_par(_Unchecked(_First1), _Unchecked(_Last1),
+			_Unchecked(_First2), _Pred, _Exec));
+	}
+
+template <class _InIt1,
+	class _InIt2,
+	class _Pr> inline
+	bool _Equal_par(
+		_InIt1 _First1, _InIt1 _Last1, _InIt2 _First2, _Pr _Pred,
+		execution::sequenced_policy)
+	{	// perform function sequentially
+	_TRY_BEGIN
+		return (_STD equal(_First1, _Last1, _First2, _Pred));
+	_CATCH_PAR_END
+	return (false);	// to quiet diagnostics
+	}
+
+template <class _FwdIt1,
+	class _FwdIt2,
+	class _Pr> inline
+	bool _Equal_par(
+		_FwdIt1 _First1, _FwdIt1 _Last1,
+			_FwdIt2 _First2, _FwdIt2 _Last2, _Pr _Pred,
+				execution::_Parallel_policy _Exec)
+	{	// perform function in parallel
+	_DEBUG_RANGE(_First1, _Last1);
+	_DEBUG_RANGE(_First2, _Last2);
+	return (_Do_equal_par(_Unchecked(_First1),
+		_Lesser(std::distance(_First1, _Last1),
+			std::distance(_First2, _Last2)),
+		_Unchecked(_First2), _Pred, _Exec));
+	}
+
+template <class _InIt1,
+	class _InIt2,
+	class _Pr> inline
+	bool _Equal_par(
+		_InIt1 _First1, _InIt1 _Last1,
+			_InIt2 _First2, _InIt2 _Last2, _Pr _Pred,
+				execution::sequenced_policy)
+	{	// perform function sequentially
+	_TRY_BEGIN
+		return (_STD equal(_First1, _Last1, _First2, _Last2, _Pred));
+	_CATCH_PAR_END
+	return (false);	// to quiet diagnostics
+	}
+
+		// TEMPLATE FUNCTION PARALLEL equal
+template<class _Policy,
+	class _InIt1,
+	class _InIt2,
+	class _Pr,
+	class = enable_if_t<is_execution_policy<decay_t<_Policy> >::value,
+		void> > inline
+	bool equal(_Policy&& _Exec,
+		_InIt1 _First1, _InIt1 _Last1,
+		_InIt2 _First2, _Pr _Pred)
+	{	// compare [_First1, _Last1) to [_First2, ...) using _Pred
+	return (_Equal_par(_First1, _Last1, _First2, _Pred,
+		_GET_POLICY2(_First1, _First2, _Exec)));
+	}
+
+template<class _Policy,
+	class _InIt1,
+	class _InIt2,
+	class = enable_if_t<is_execution_policy<decay_t<_Policy> >::value,
+		void> > inline
+	bool equal(_Policy&& _Exec,
+		_InIt1 _First1, _InIt1 _Last1,
+		_InIt2 _First2)
+	{	// compare [_First1, _Last1) to [_First2, ...)
+	return (_Equal_par(_First1, _Last1, _First2,
+		_FUNCTOR(equal_to, _First),
+			_GET_POLICY2(_First1, _First2, _Exec)));
+	}
+
+template<class _Policy,
+	class _InIt1,
+	class _InIt2,
+	class _Pr,
+	class = enable_if_t<is_execution_policy<decay_t<_Policy> >::value,
+		void> > inline
+	bool equal(_Policy&& _Exec,
+		_InIt1 _First1, _InIt1 _Last1,
+		_InIt2 _First2, _InIt2 _Last2, _Pr _Pred)
+	{	// compare [_First1, _Last1) to [_First2, _Last2) using _Pred
+	return (_Equal_par(_First1, _Last1, _First2, _Last2, _Pred,
+		_GET_POLICY2(_First1, _First2, _Exec)));
+	}
+
+template<class _Policy,
+	class _InIt1,
+	class _InIt2,
+	class = enable_if_t<is_execution_policy<decay_t<_Policy> >::value,
+		void> > inline
+	bool equal(_Policy&& _Exec,
+		_InIt1 _First1, _InIt1 _Last1,
+		_InIt2 _First2, _InIt2 _Last2)
+	{	// compare [_First1, _Last1) to [_First2, _Last2)
+	return (_Equal_par(_First1, _Last1, _First2, _Last2, _FUNCTOR(equal_to, _First),
+		_GET_POLICY2(_First1, _First2, _Exec)));
+	}
+ #endif /* _HAS_CPP17 */
+
+		// TEMPLATE FUNCTION find_if
+template<class _InIt,
+	class _Pr> inline
+	_InIt _Find_if(_InIt _First, _InIt _Last, _Pr _Pred)
+	{	// find first satisfying _Pred
+	for (; _First != _Last; ++_First)
+		if (_Pred(*_First))
+			break;
+	return (_First);
+	}
+
+template<class _InIt,
+	class _Pr> inline
+	_InIt find_if(_InIt _First, _InIt _Last, _Pr _Pred)
+	{	// find first satisfying _Pred
+	_DEBUG_RANGE_PTR(_First, _Last, _Pred);
+	return (_Rechecked(_First,
+		_Find_if(_Unchecked(_First), _Unchecked(_Last), _Pred)));
+	}
+
+ #if _HAS_CPP17
+		// TEMPLATE CLASS _Find_if_payload
+template <class _FwdIt,
+	class _Pr>
+	struct _Find_if_payload
+		: _Payload_base_single_range<_Tiled_range<_FwdIt> >,
+			_Init_value_helper<_Tile_result<_FwdIt> >
+	{	// payload for parallel find_if
+	typedef _FwdIt _Result_type;
+	typedef _Tile_result<_Result_type> _Tile_result_type;
+	typedef _Payload_base_single_range<_Tiled_range<_FwdIt> > _Mybase;
+	typedef typename _Mybase::_Range_type _Range_type;
+
+	_Find_if_payload(_FwdIt _First, _FwdIt _Last, _Pr _Pr_arg,
+		execution::_Parallel_policy& _Exec)
+		: _Mybase(_First, _Last, _Exec),
+		_Init_value_helper<_Tile_result<_FwdIt> >(
+			_Tile_result_type(_Last, (unsigned int)(-1))),
+				_Pred(_Pr_arg)
+		{	// construct with iterator pair, predicate, and policy
+		}
+
+	_Tile_result_type _Apply(_Range_type _Rng, _Tile_result_type _Previous)
+		{	// perform function for each element in subrange
+		_Tile_result_type _Res(_Find_if(_Rng._First, _Rng._Last, _Pred),
+			_Rng._Index);
+		return (this->_Maybe_short_circuit(_Res, _Rng._Last, _Previous));
+		}
+
+	static _Tile_result_type _Reduce(_Tile_result_type _Lhs,
+		_Tile_result_type _Rhs)
+		{   // combine values from subranges
+		return (_Lhs._Index < _Rhs._Index ? _Lhs : _Rhs);
+		}
+
+	_Result_type _Get(_Tile_result_type _Res) const
+		{   // extract result
+		return _Res._Value;
+		}
+
+	_Pr _Pred;
+	};
+
+		// TEMPLATE FUNCTION _Do_find_if_par
+template <class _FwdIt,
+	class _Pr> inline
+	_FwdIt _Do_find_if_par(
+		_FwdIt _First, _FwdIt _Last, _Pr _Pred,
+			execution::_Parallel_policy _Exec)
+	{	// perform function in parallel
+	typedef _Find_if_payload<_FwdIt, _Pr> _MyPy;
+	_MyPy _Payload(_First, _Last, _Pred, _Exec);
+	_Master_task_with_result<_MyPy> _Master(_Payload);
+	_Master._Launch();
+	return (_Master._Get());
+	}
+
+		// TEMPLATE FUNCTION _Find_if_par
+template <class _FwdIt,
+	class _Pr> inline
+	_FwdIt _Find_if_par(_FwdIt _First, _FwdIt _Last, _Pr _Pred,
+		execution::_Parallel_policy _Exec)
+	{	// perform function in parallel
+	_DEBUG_RANGE_PTR(_First, _Last, _Pred);
+	return _Rechecked(_First, _Do_find_if_par(
+		_Unchecked(_First), _Unchecked(_Last), _Pred, _Exec));
+	}
+
+template <class _RanIt,
+	class _Pr> inline
+	_RanIt _Find_if_par(_RanIt _First, _RanIt _Last, _Pr _Pred,
+		execution::sequenced_policy)
+	{	// perform function sequentially
+	_TRY_BEGIN
+		return (_STD find_if(_First, _Last, _Pred));
+	_CATCH_PAR_END
+	return (_First);	// to quiet diagnostics
+	}
+
+		// TEMPLATE FUNCTION PARALLEL find_if
+template<class _Policy,
+	class _InIt,
+	class _Pr,
+	class = enable_if_t<is_execution_policy<decay_t<_Policy> >::value,
+		void> > inline
+	_InIt find_if(_Policy&& _Exec,
+		_InIt _First, _InIt _Last, _Pr _Pred)
+	{	// find first satisfying _Pred
+	return (_Find_if_par(_First, _Last, _Pred,
+		_GET_POLICY(_First, _Exec)));
+	}
+ #endif /* _HAS_CPP17 */
+
+		// TEMPLATE FUNCTION lexicographical_compare
+template<class _InIt1,
+	class _InIt2> inline
+	bool _Lexicographical_compare(_InIt1 _First1, _InIt1 _Last1,
+		_InIt2 _First2, _InIt2 _Last2)
+	{	// order [_First1, _Last1) vs. [_First2, _Last2)
+	for (; _First1 != _Last1 && _First2 != _Last2; ++_First1, (void)++_First2)
+		if (_DEBUG_LT(*_First1, *_First2))
+			return (true);
+		else if (*_First2 < *_First1)
+			return (false);
+	return (_First1 == _Last1 && _First2 != _Last2);
+	}
+
+inline bool _Lexicographical_compare(
+	const unsigned char *_First1, const unsigned char *_Last1,
+	const unsigned char *_First2, const unsigned char *_Last2)
+	{	// order [_First1, _Last1) vs. [_First2, _Last2), for unsigned char
+	ptrdiff_t _Num1 = _Last1 - _First1;
+	ptrdiff_t _Num2 = _Last2 - _First2;
+	int _Ans = _CSTD memcmp(_First1, _First2, _Num1 < _Num2 ? _Num1 : _Num2);
+	return (_Ans < 0 || (_Ans == 0 && _Num1 < _Num2));
+	}
+
+ #if CHAR_MAX == UCHAR_MAX
+inline bool _Lexicographical_compare(
+	const char *_First1, const char *_Last1,
+	const char *_First2, const char *_Last2)
+	{	// order [_First1, _Last1) vs. [_First2, _Last2), for nonnegative char
+	ptrdiff_t _Num1 = _Last1 - _First1;
+	ptrdiff_t _Num2 = _Last2 - _First2;
+	int _Ans = _CSTD memcmp(_First1, _First2, _Num1 < _Num2 ? _Num1 : _Num2);
+	return (_Ans < 0 || _Ans == 0 && _Num1 < _Num2);
+	}
+ #endif /* CHAR_MAX == UCHAR_MAX */
+
+template<class _InIt1,
+	class _InIt2> inline
+	bool lexicographical_compare(_InIt1 _First1, _InIt1 _Last1,
+		_InIt2 _First2, _InIt2 _Last2)
+	{	// order [_First1, _Last1) vs. [_First2, _Last2)
+	_DEBUG_RANGE(_First1, _Last1);
+	_DEBUG_RANGE(_First2, _Last2);
+	return (_Lexicographical_compare(_Unchecked(_First1), _Unchecked(_Last1),
+		_Unchecked(_First2), _Unchecked(_Last2)));
+	}
+
+		// TEMPLATE FUNCTION lexicographical_compare WITH PRED
+template<class _InIt1,
+	class _InIt2,
+	class _Pr> inline
+	bool _Lexicographical_compare(_InIt1 _First1, _InIt1 _Last1,
+		_InIt2 _First2, _InIt2 _Last2, _Pr _Pred)
+	{	// order [_First1, _Last1) vs. [_First2, _Last2) using _Pred
+	for (; _First1 != _Last1 && _First2 != _Last2; ++_First1, (void)++_First2)
+		{	// something to compare, do it
+		if (_DEBUG_LT_PRED(_Pred, *_First1, *_First2))
+			return (true);
+		else if (_Pred(*_First2, *_First1))
+			return (false);
+		}
+	return (_First1 == _Last1 && _First2 != _Last2);
+	}
+
+template<class _InIt1,
+	class _InIt2,
+	class _Pr> inline
+	bool lexicographical_compare(_InIt1 _First1, _InIt1 _Last1,
+		_InIt2 _First2, _InIt2 _Last2, _Pr _Pred)
+	{	// order [_First1, _Last1) vs. [_First2, _Last2) using _Pred
+	_DEBUG_RANGE(_First1, _Last1);
+	_DEBUG_RANGE(_First2, _Last2);
+	_DEBUG_POINTER_IF(_First1 != _Last1 && _First2 != _Last2, _Pred);
+	return (_Lexicographical_compare(_Unchecked(_First1), _Unchecked(_Last1),
+		_Unchecked(_First2), _Unchecked(_Last2), _Pred));
+	}
+
+ #if _HAS_CPP17
+		// TEMPLATE CLASS _Lexicographical_compare_payload
+template<class _FwdIt1,
+	class _FwdIt2,
+	class _Pr>
+	struct _Lexicographical_compare_payload
+		: _Payload_base_dual_range<
+			_Tiled_range<_FwdIt1>, _Tiled_range<_FwdIt2> >,
+			_Init_value_helper<_Tile_result<int> >
+	{	// payload for parallel lexicographical_compare
+	typedef int _Result_type;
+	typedef _Tile_result<_Result_type> _Tile_result_type;
+	typedef _Payload_base_dual_range<
+		_Tiled_range<_FwdIt1>, _Tiled_range<_FwdIt2>> _Mybase;
+	typedef typename _Mybase::_Range_type _Range_type;
+
+	template<class _Diff>
+		_Lexicographical_compare_payload(_FwdIt1 _First1, _Diff _Count,
+			_FwdIt2 _First2, _Pr _Pred_arg,
+				execution::_Parallel_policy& _Exec)
+		: _Mybase(_First1, _Count, _First2, _Exec),
+			_Init_value_helper<_Tile_result<int> >(
+				_Tile_result_type(0, (unsigned int)(-1))),
+			_Pred(_Pred_arg)
+		{	// construct with iterator, size, iterator, predicate, and policy
+		}
+
+	_Tile_result_type _Apply(_Range_type _Range, _Tile_result_type _Previous)
+		{	// apply test to payload
+		int _Res = 0;
+		while (_Range._First1 != _Range._Last1 && _Res == 0)
+				if (_Pred(*_Range._First1, *_Range._First2))
+				_Res = -1;
+			else if (_Pred(*_Range._First2, *_Range._First1))
+				_Res = 1;
+			else
+				++_Range._First1, ++_Range._First2;
+		return (this->_Maybe_short_circuit(
+			_Tile_result_type(_Res, _Range._Index), 0, _Previous));
+		}
+
+	static _Tile_result_type
+		_Reduce(_Tile_result_type _Lhs, _Tile_result_type _Rhs)
+			{	// compare results
+			return _Lhs._Value == 0 ? _Rhs
+				: _Rhs._Value == 0 ? _Lhs
+				: _Lhs._Index < _Rhs._Index ? _Lhs
+				: _Rhs;
+			}
+
+	_Result_type _Get(_Tile_result_type _Res)
+		{	// extract result
+		return _Res._Value;
+		}
+
+	_Pr _Pred;
+	};
+
+ 		// TEMPLATE FUNCTION _Match_lengths
+template<class _FwdIt1,
+	class _FwdIt2,
+	class _Diff,
+	class _Cat1,
+	class _Cat2>
+	typename _STD iterator_traits<_FwdIt1>::difference_type
+		_Match_lengths(_FwdIt1 _First1, _FwdIt1& _Last1,
+			_FwdIt2 _First2, _FwdIt2& _Last2,
+				_Diff*, _Cat1, _Cat2)
+	{	// compare lengths
+	_Diff _Count = 0;
+	while (_First1 != _Last1 && _First2 != _Last2)
+		{	// count length
+		++_Count;
+		++_First1;
+		++_First2;
+		}
+	_Last1 = _First1;
+	_Last2 = _First2;
+	return (_Count);
+	}
+
+template<class _RanIt1,
+	class _RanIt2,
+	class _Diff>
+	typename _STD iterator_traits<_RanIt1>::difference_type
+		_Match_lengths(_RanIt1 _First1, _RanIt1& _Last1,
+			_RanIt2 _First2, _RanIt2& _Last2,
+			_Diff *, random_access_iterator_tag, random_access_iterator_tag)
+	{
+	_Diff _Count = _Last1 - _First1;
+	if (_Last2 - _First2 < _Count)
+		_Count = _Last2 - _First2;
+	_Last1 = _First1 + _Count;
+	_Last2 = _First2 + _Count;
+	return (_Count);
+	}
+
+		// TEMPLATE FUNCTION _Do_lexicographical_compare_pred_par
+template<class _FwdIt1,
+	class _FwdIt2,
+	class _Pr>
+	bool _Do_lexicographical_compare_pred_par(
+		_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2, _FwdIt2 _Last2,
+		_Pr _Pred,
+			execution::_Parallel_policy _Exec)
+	{	// perform function in parallel
+	_FwdIt1 _Last1x = _Last1;
+	_FwdIt2 _Last2x = _Last2;
+	typedef typename _STD iterator_traits<_FwdIt1>::difference_type _Diff;
+	_Diff _Count = _Match_lengths(_First1, _Last1, _First2, _Last2,
+		(_Diff *)0, _Iter_cat(_First1), _Iter_cat(_First2));
+
+	typedef _Lexicographical_compare_payload<_FwdIt1, _FwdIt2, _Pr> _Payl;
+	_Payl _Payload(_First1, _Count, _First2, _Pred, _Exec);
+	_Master_task_with_result<_Payl> _Master(_Payload);
+	_Master._Launch();
+	int _Res = _Master._Get();
+	return (_Res < 0 ? true
+		: 0 < _Res ? false
+		: _Last1 == _Last1x && _Last2 != _Last2x);
+	}
+
+template<class _FwdIt1,
+	class _FwdIt2,
+	class _Pr>
+	bool _Lexicographical_compare_pred_par(
+		_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2, _FwdIt2 _Last2,
+		_Pr _Pred,
+			execution::_Parallel_policy _Exec)
+	{	// perform function in parallel
+	_DEBUG_RANGE(_First1, _Last1);
+	_DEBUG_RANGE(_First2, _Last2);
+	_DEBUG_POINTER_IF(_First1 != _Last1 && _First2 != _Last2, _Pred);
+	return (_Do_lexicographical_compare_pred_par(
+		_Unchecked(_First1), _Unchecked(_Last1),
+		_Unchecked(_First2), _Unchecked(_Last2),
+		_Pred, _Exec));
+	}
+
+template<class _FwdIt1,
+	class _FwdIt2,
+	class _Pr>
+	bool _Lexicographical_compare_pred_par(
+		_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2, _FwdIt2 _Last2,
+		_Pr _Pred,
+			execution::sequenced_policy)
+	{	// perform function sequentially
+	_TRY_BEGIN
+		return (_STD lexicographical_compare(
+			_First1, _Last1,
+			_First2, _Last2, _Pred));
+	_CATCH_PAR_END
+	return (false);	// to quiet diagnostics
+	}
+
+template<class _Policy,
+	class _InIt1,
+	class _InIt2,
+	class = enable_if_t<is_execution_policy<decay_t<_Policy> >::value,
+		void> > inline
+	bool lexicographical_compare(_Policy&& _Exec,
+		_InIt1 _First1, _InIt1 _Last1,
+		_InIt2 _First2, _InIt2 _Last2)
+	{	// order [_First1, _Last1) vs. [_First2, _Last2)
+	return (_STD _Lexicographical_compare_pred_par(_First1, _Last1,
+		_First2, _Last2,
+		_FUNCTOR(less, _First1),
+		_GET_POLICY2(_First1, _First2, _Exec)));
+	}
+
+template<class _Policy,
+	class _InIt1,
+	class _InIt2,
+	class _Pr,
+	class = enable_if_t<is_execution_policy<decay_t<_Policy> >::value,
+		void> > inline
+	bool lexicographical_compare(_Policy&& _Exec,
+		_InIt1 _First1, _InIt1 _Last1,
+		_InIt2 _First2, _InIt2 _Last2, _Pr _Pred)
+	{	// order [_First1, _Last1) vs. [_First2, _Last2) using _Pred
+	return (_STD _Lexicographical_compare_pred_par(_First1, _Last1,
+		_First2, _Last2,
+		_Pred,
+		_GET_POLICY2(_First1, _First2, _Exec)));
+	}
+ #endif /* _HAS_CPP17 */
+
+		// TEMPLATE FUNCTION find
+template<class _Ty,
+	class _Ignored> inline
+	bool _Within_limits(const _Ty& _Val, true_type, true_type, _Ignored)
+	{	// signed _Elem, signed _Ty
+	return (SCHAR_MIN <= _Val && _Val <= SCHAR_MAX);
+	}
+
+template<class _Ty> inline
+	bool _Within_limits(const _Ty& _Val, true_type, false_type, true_type)
+	{	// signed _Elem, unsigned _Ty, -1 == static_cast<_Ty>(-1)
+	return (_Val <= SCHAR_MAX || static_cast<_Ty>(SCHAR_MIN) <= _Val);
+	}
+
+template<class _Ty> inline
+	bool _Within_limits(const _Ty& _Val, true_type, false_type, false_type)
+	{	// signed _Elem, unsigned _Ty, -1 != static_cast<_Ty>(-1)
+	return (_Val <= SCHAR_MAX);
+	}
+
+template<class _Ty,
+	class _Ignored> inline
+	bool _Within_limits(const _Ty& _Val, false_type, true_type, _Ignored)
+	{	// unsigned _Elem, signed _Ty
+	return (0 <= _Val && _Val <= UCHAR_MAX);
+	}
+
+template<class _Ty,
+	class _Ignored> inline
+	bool _Within_limits(const _Ty& _Val, false_type, false_type, _Ignored)
+	{	// unsigned _Elem, unsigned _Ty
+	return (_Val <= UCHAR_MAX);
+	}
+
+template<class _InIt,
+	class _Ty> inline
+	bool _Within_limits(_InIt, const _Ty& _Val)
+	{	// check whether _Val is within the limits of _Elem
+	typedef typename remove_pointer<_InIt>::type _Elem;
+	return (_Within_limits(_Val, is_signed<_Elem>(), is_signed<_Ty>(),
+		integral_constant<bool, -1 == static_cast<_Ty>(-1)>()));
+	}
+
+template<class _InIt> inline
+	bool _Within_limits(_InIt, const bool&)
+	{	// bools are always within the limits of _Elem
+	return (true);
+	}
+
+template<class _InIt,
+	class _Ty> inline
+	_InIt _Find(_InIt _First, _InIt _Last, const _Ty& _Val, true_type)
+	{	// find first byte matching integral _Val
+	if (!_Within_limits(_First, _Val))
+		return (_Last);
+	_First = static_cast<_InIt>(_CSTD memchr(
+		_First, static_cast<unsigned char>(_Val), _Last - _First));
+	return (_First ? _First : _Last);
+	}
+
+template<class _InIt,
+	class _Ty> inline
+	_InIt _Find(_InIt _First, _InIt _Last, const _Ty& _Val, false_type)
+	{	// find first matching _Val
+	for (; _First != _Last; ++_First)
+		if (*_First == _Val)
+			break;
+	return (_First);
+	}
+
+template<class _InIt,
+	class _Ty> inline
+	_InIt _Find(_InIt _First, _InIt _Last, const _Ty& _Val)
+	{	// find first matching _Val
+	// activate optimization for pointers to (const) bytes and integral values
+	typedef integral_constant<bool,
+		(is_same<_InIt, char *>::value
+		|| is_same<_InIt, signed char *>::value
+		|| is_same<_InIt, unsigned char *>::value
+		|| is_same<_InIt, const char *>::value
+		|| is_same<_InIt, const signed char *>::value
+		|| is_same<_InIt, const unsigned char *>::value)
+		&& is_integral<_Ty>::value
+	> _Memchr_opt;
+	return (_Find(_First, _Last, _Val, _Memchr_opt()));
+	}
+
+template<class _InIt,
+	class _Ty> inline
+	_InIt find(_InIt _First, _InIt _Last, const _Ty& _Val)
+	{	// find first matching _Val
+	_DEBUG_RANGE(_First, _Last);
+	return (_Rechecked(_First,
+		_Find(_Unchecked(_First), _Unchecked(_Last), _Val)));
+	}
+
+ #if _HAS_CPP17
+		// TEMPLATE CLASS _Find_payload
+template<class _FwdIt,
+	class _Ty>
+	struct _Find_payload
+		: _Payload_base_single_range<_Tiled_range<_FwdIt>>,
+			_Init_value_helper<_Tile_result<_FwdIt>>
+	{	// payload for parallel find
+	typedef _FwdIt _Result_type;
+	typedef _Tile_result<_Result_type> _Tile_result_type;
+	typedef _Payload_base_single_range<_Tiled_range<_FwdIt>> _Mybase;
+	typedef typename _Mybase::_Range_type _Range_type;
+
+	_Find_payload(_FwdIt _First, _FwdIt _Last, const _Ty& _Val_arg,
+		execution::_Parallel_policy& _Exec)
+		: _Mybase(_First, _Last, _Exec),
+			_Init_value_helper<_Tile_result<_FwdIt> >(
+				_Tile_result_type(_Last, (unsigned int)(-1))),
+			_Val(_Val_arg)
+		{	// construct with iterator pair, value, and policy
+		}
+
+	_Tile_result_type _Apply(_Range_type _Range, _Tile_result_type _Previous)
+		{	// perform function for each element in subrange
+		_Tile_result_type _Res(
+			_Find(_Range._First, _Range._Last, _Val), _Range._Index);
+		return (this->_Maybe_short_circuit(_Res, _Range._Last, _Previous));
+		}
+
+	static _Tile_result_type
+		_Reduce(_Tile_result_type _Lhs, _Tile_result_type _Rhs)
+		{	// combine values from subranges
+		return (_Lhs._Index < _Rhs._Index ? _Lhs : _Rhs);
+		}
+
+	_Result_type _Get(_Tile_result_type _Res) const
+		{	// extract result
+		return _Res._Value;
+		}
+
+	const _Ty& _Val;
+	};
+
+		// TEMPLATE FUNCTION _Do_find_par
+template<class _FwdIt,
+	class _Ty> inline
+	_FwdIt _Do_find_par(
+		_FwdIt _First, _FwdIt _Last, const _Ty& _Val,
+			execution::_Parallel_policy _Exec)
+	{	// perform function in parallel
+	typedef _Find_payload<_FwdIt, _Ty> _MyPy;
+	_MyPy _Payload(_First, _Last, _Val, _Exec);
+	_Master_task_with_result<_MyPy> _Master(_Payload);
+	_Master._Launch();
+	return (_Master._Get());
+	}
+
+		// TEMPLATE FUNCTION _Find_par
+template<class _FwdIt,
+	class _Ty> inline
+	_FwdIt _Find_par(
+	_FwdIt _First, _FwdIt _Last, const _Ty& _Val,
+	execution::_Parallel_policy _Exec)
+	{	// perform function in parallel
+	_DEBUG_RANGE(_First, _Last);
+	return _Rechecked(_First, _Do_find_par(
+		_Unchecked(_First), _Unchecked(_Last), _Val, _Exec));
+	}
+
+template<class _RanIt,
+	class _Ty> inline
+	_RanIt _Find_par(
+	_RanIt _First, _RanIt _Last, const _Ty& _Val,
+	execution::sequenced_policy)
+	{	// perform function sequentially
+	_TRY_BEGIN
+		return (_STD find(_First, _Last, _Val));
+	_CATCH_PAR_END
+	return (_First);	// to quiet diagnostics
+	}
+
+		// TEMPLATE FUNCTION PARALLEL find
+template<class _Policy,
+	class _InIt,
+	class _Ty,
+	class = enable_if_t<is_execution_policy<decay_t<_Policy> >::value,
+		void> > inline
+	_InIt find(_Policy&& _Exec,
+		_InIt _First, _InIt _Last, const _Ty& _Val)
+	{	// find first matching _Val
+	return (_Find_par(_First, _Last, _Val,
+		_GET_POLICY(_First, _Exec)));
+	}
+ #endif /* _HAS_CPP17 */
+
+		// TEMPLATE FUNCTION _Find_pr WITH PRED
+template<class _InIt,
+	class _Ty,
+	class _Pr> inline
+	_InIt _Find_pr(_InIt _First, _InIt _Last, const _Ty& _Val, _Pr _Pred)
+	{	// find first matching _Val, using _Pred
+	for (; _First != _Last; ++_First)
+		if (_Pred(*_First, _Val))
+			break;
+	return (_First);
+	}
+
+		// TEMPLATE FUNCTION remove_if
+template<class _FwdIt,
+	class _Pr> inline
+	_FwdIt _Remove_if(_FwdIt _First, _FwdIt _Last, _Pr _Pred)
+	{	// remove each satisfying _Pred
+	_FwdIt _Next = _First;
+	for (++_First; _First != _Last; ++_First)
+	if (!_Pred(*_First))
+		*_Next++ = _Move(*_First);
+	return (_Next);
+	}
+
+template<class _FwdIt,
+	class _Pr> inline
+	_FwdIt remove_if(_FwdIt _First, _FwdIt _Last, _Pr _Pred)
+	{	// remove each satisfying _Pred
+	_First = _STD find_if(_First, _Last, _Pred);
+	if (_First == _Last)
+		return (_First);	// empty sequence, all done
+	else
+		return (_Rechecked(_First,
+			_Remove_if(_Unchecked(_First), _Unchecked(_Last), _Pred)));
+	}
+
+ #if _HAS_CPP17
+		// TEMPLATE FUNCTION _Do_remove_if_par
+template<class _FwdIt,
+	class _Pr> inline
+	_FwdIt _Do_remove_if_par(
+		_FwdIt _First, _FwdIt _Last, _Pr _Pred,
+			execution::_Parallel_policy _Exec)
+	{	// perform function in parallel
+	return (_Do_conditional_copy(_First, _Last, _Make_negation(_Pred),
+		_STD distance(_First, _Last), _Exec));
+	}
+
+		/* TEMPLATE FUNCTION _Remove_if_par */
+template<class _FwdIt,
+	class _Pr> inline
+	_FwdIt _Remove_if_par(
+		_FwdIt _First, _FwdIt _Last, _Pr _Pred,
+			execution::_Parallel_policy _Exec)
+	{	// perform function in parallel
+	_DEBUG_POINTER_IF(_First != _Last, _Pred);
+	return (_Rechecked(_First,
+		_Do_remove_if_par(_Unchecked(_First), _Unchecked(_Last),
+			_Pred, _Exec)));
+	}
+
+template<class _FwdIt,
+	class _Pr> inline
+	_FwdIt _Remove_if_par(
+		_FwdIt _First, _FwdIt _Last, _Pr _Pred,
+			execution::sequenced_policy)
+	{	// perform function sequentially
+	_TRY_BEGIN
+		return (_STD remove_if(_First, _Last, _Pred));
+	_CATCH_PAR_END
+	return (_First);	// to quiet diagnostics
+	}
+
+template<class _Policy,
+	class _FwdIt,
+	class _Pr,
+	class = typename enable_if<is_execution_policy<decay_t<_Policy> >::value,
+		void>::type> inline
+	_FwdIt remove_if(_Policy&& _Exec,
+		_FwdIt _First, _FwdIt _Last, _Pr _Pred)
+	{	// remove each satisfying _Pred
+	return (_Remove_if_par(_First, _Last, _Pred,
+		_GET_POLICY(_First, _Exec)));
+	}
+ #endif /* _HAS_CPP17 */
+
+		// TEMPLATE FUNCTION remove
+template<class _FwdIt,
+	class _Ty> inline
+	_FwdIt _Remove(_FwdIt _First, _FwdIt _Last, const _Ty& _Val)
+	{	// remove each matching _Val
+	_FwdIt _Next = _First;
+	for (++_First; _First != _Last; ++_First)
+		if (!(*_First == _Val))
+			*_Next++ = _Move(*_First);
+	return (_Next);
+	}
+
+template<class _FwdIt,
+	class _Ty> inline
+	_FwdIt remove(_FwdIt _First, _FwdIt _Last, const _Ty& _Val)
+	{	// remove each matching _Val
+	_First = _STD find(_First, _Last, _Val);
+	if (_First == _Last)
+		return (_First);	// empty sequence, all done
+	else
+		return (_Rechecked(_First,
+			_Remove(_Unchecked(_First), _Unchecked(_Last), _Val)));
+	}
+
+ #if _HAS_CPP17
+template<class _Policy,
+	class _FwdIt,
+	class _Ty,
+	class = typename enable_if<is_execution_policy<decay_t<_Policy> >::value,
+		void>::type> inline
+	_FwdIt remove(_Policy&& _Exec,
+		_FwdIt _First, _FwdIt _Last, const _Ty& _Val)
+	{	// remove each matching _Val
+	return (remove_if(_Exec, _First, _Last, _Make_match_pred(_Val)));
+	}
+ #endif /* _HAS_CPP17 */
+
+		// TEMPLATE FUNCTION count
+template<class _InIt,
+	class _Ty> inline
+	typename iterator_traits<_InIt>::difference_type
+		_Count(_InIt _First, _InIt _Last, const _Ty& _Val)
+	{	// count elements that match _Val
+	typename iterator_traits<_InIt>::difference_type _Count = 0;
+
+	for (; _First != _Last; ++_First)
+		if (*_First == _Val)
+			++_Count;
+	return (_Count);
+	}
+
+template<class _InIt,
+	class _Ty> inline
+	typename iterator_traits<_InIt>::difference_type
+		count(_InIt _First, _InIt _Last, const _Ty& _Val)
+	{	// count elements that match _Val
+	_DEBUG_RANGE(_First, _Last);
+	return (_Count(_Unchecked(_First), _Unchecked(_Last), _Val));
+	}
+
+		// TEMPLATE FUNCTION _Count_pr WITH PRED
+template<class _InIt,
+	class _Ty,
+	class _Pr> inline
+	typename iterator_traits<_InIt>::difference_type
+		_Count_pr(_InIt _First, _InIt _Last, const _Ty& _Val, _Pr _Pred)
+	{	// count elements that match _Val, using _Pred
+	typename iterator_traits<_InIt>::difference_type _Count = 0;
+
+	for (; _First != _Last; ++_First)
+		if (_Pred(*_First, _Val))
+			++_Count;
+	return (_Count);
+	}
+
+ #if _HAS_CPP17
+		/* TEMPLATE CLASS _Count_payload */
+template<class _FwdIt,
+	class _Ty>
+	struct _Count_payload
+		: _Payload_base_single_range<_Tiled_range<_FwdIt>>,
+			_Init_value_helper<
+				typename _STD iterator_traits<_FwdIt>::difference_type>
+	{	// payload for parallel count algorithms
+	typedef typename std::iterator_traits<_FwdIt>::difference_type
+		_Result_type;
+	typedef _Result_type _Tile_result_type;
+	typedef _Payload_base_single_range< _Tiled_range<_FwdIt>> _Mybase;
+	typedef typename _Mybase::_Range_type _Range_type;
+
+	template<class _ItOrDiff>
+		_Count_payload(_FwdIt _First, _ItOrDiff _IorD, const _Ty& _Val,
+			execution::_Parallel_policy& _Exec)
+			: _Mybase(_First, _IorD, _Exec), _Value(_Val),
+				_Init_value_helper<
+					typename _STD iterator_traits<_FwdIt>::difference_type>(0)
+		{	// construct with iterator, iterator or size, value, and policy
+		}
+
+	_Tile_result_type _Apply(_Range_type _Range, _Tile_result_type _Previous)
+		{	// perform function for each element in subrange
+		return (_Reduce(_Previous,
+			count(_Range._First, _Range._Last, _Value)));
+		}
+
+	static _Tile_result_type
+		_Reduce(_Tile_result_type _Lhs, _Tile_result_type _Rhs)
+		{	// combine values from subranges
+		return (_Lhs + _Rhs);
+		}
+
+	_Result_type _Get(_Tile_result_type _Res) const
+		{	// extract result
+		return (_Res);
+		}
+
+	const _Ty& _Value;
+	};
+
+		/* TEMPLATE FUNCTION _Do_count_par */
+template<class _FwdIt,
+	class _Ty> inline
+	typename std::iterator_traits<_FwdIt>::difference_type
+		_Do_count_par(_FwdIt _First, _FwdIt _Last, const _Ty& _Val,
+			execution::_Parallel_policy _Exec)
+	{	// perform function in parallel
+	typedef _Count_payload<_FwdIt, _Ty> _MyPy;
+	_MyPy _Payload(_First, _Last, _Val, _Exec);
+	_Master_task_with_result<_MyPy> _Master(_Payload);
+	_Master._Launch();
+	return (_Master._Get());
+	}
+
+		/* TEMPLATE FUNCTION _Count_par */
+template<class _FwdIt,
+	class _Ty> inline
+	typename std::iterator_traits<_FwdIt>::difference_type
+		_Count_par(_FwdIt _First, _FwdIt _Last, const _Ty& _Val,
+			execution::_Parallel_policy _Exec)
+	{	// perform function in parallel
+	_DEBUG_RANGE(_First, _Last);
+	return (_Do_count_par(_Unchecked(_First), _Unchecked(_Last), _Val, _Exec));
+	}
+
+template<class _InIt,
+	class _Ty> inline
+	typename std::iterator_traits<_InIt>::difference_type
+		_Count_par(_InIt _First, _InIt _Last, const _Ty& _Val,
+			execution::sequenced_policy)
+	{	// perform function sequentially
+	_TRY_BEGIN
+		return (_STD count(_First, _Last, _Val));
+	_CATCH_PAR_END
+	return (0);	// to quiet diagnostics
+	}
+
+		/* TEMPLATE FUNCTION PARALLEL count */
+template<class _Policy,
+	class _InIt,
+	class _Ty,
+	class = typename enable_if<is_execution_policy<decay_t<_Policy> >::value,
+		void>::type> inline
+	typename iterator_traits<_InIt>::difference_type
+		count(_Policy&& _Exec, _InIt _First, _InIt _Last, const _Ty& _Val)
+	{	// count elements that match _Val
+	return (_Count_par(_First, _Last, _Val,
+		_GET_POLICY(_First, _Exec)));
+	}
+ #endif /* _HAS_CPP17 */
+
+		// TEMPLATE FUNCTION _Trim_matching_suffixes WITH PRED
+template<class _FwdIt1,
+	class _FwdIt2,
+	class _Pr> inline
+	void _Trim_matching_suffixes(_FwdIt1&, _FwdIt2&, _Pr,
+		forward_iterator_tag, forward_iterator_tag)
+	{	// trim matching suffixes, forward iterators (do nothing)
+	}
+
+template<class _FwdIt1,
+	class _FwdIt2,
+	class _Pr> inline
+	void _Trim_matching_suffixes(_FwdIt1& _Last1, _FwdIt2& _Last2, _Pr _Pred,
+		bidirectional_iterator_tag, bidirectional_iterator_tag)
+	{	// trim matching suffixes, bidirectional iterators
+	// assumptions: same lengths, non-empty, !_Pred(*_First1, *_First2)
+	while (_Pred(*--_Last1, *--_Last2))
+		;	// find last inequality
+	++_Last1;
+	++_Last2;
+	}
+
+		// TEMPLATE FUNCTION _Check_match_counts WITH PRED
+template<class _FwdIt1,
+	class _FwdIt2,
+	class _Pr> inline
+	bool _Check_match_counts(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2, _FwdIt2 _Last2, _Pr _Pred)
+	{	// test if [_First1, _Last1) == permuted [_First2, _Last2), using _Pred, same lengths
+	_Trim_matching_suffixes(_Last1, _Last2, _Pred,
+		_Iter_cat(_Last1), _Iter_cat(_Last2));
+	typedef typename iterator_traits<_FwdIt1>::difference_type _Diff1;
+	typedef typename iterator_traits<_FwdIt2>::difference_type _Diff2;
+	for (_FwdIt1 _Next1 = _First1; _Next1 != _Last1; ++_Next1)
+		if (_Next1 == _Find_pr(_First1, _Next1, *_Next1, _Pred))
+			{	// new value, compare match counts
+			_Diff2 _Count2 = _Count_pr(_First2, _Last2, *_Next1, _Pred);
+			if (_Count2 == 0)
+				return (false);	// second range lacks value, fail
+			_FwdIt1 _Skip1 = _STD next(_Next1);
+			_Diff1 _Count1 = _Count_pr(_Skip1, _Last1, *_Next1, _Pred) + 1;
+			if (_Count2 != _Count1)
+				return (false);	// match counts differ, fail
+			}
+	return (true);
+	}
+
+		// TEMPLATE FUNCTION is_permutation WITH PRED
+template<class _FwdIt1,
+	class _FwdIt2,
+	class _Pr> inline
+	bool _Is_permutation(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2, _Pr _Pred)
+	{	// test if [_First1, _Last1) == permuted [_First2, ...), using _Pred
+	for (; _First1 != _Last1; ++_First1, (void)++_First2)
+		if (!_Pred(*_First1, *_First2))
+			{	// found first inequality, check match counts in suffix
+			_FwdIt2 _Last2 = _STD next(_First2,
+				_STD distance(_First1, _Last1));
+			return (_Check_match_counts(_First1, _Last1,
+				_First2, _Last2, _Pred));
+			}
+	return (true);
+	}
+
+ #if _ITERATOR_DEBUG_LEVEL == 0
+template<class _FwdIt1,
+	class _FwdIt2,
+	class _Pr> inline
+	bool is_permutation(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2, _Pr _Pred)
+	{	// test if [_First1, _Last1) == permuted [_First2, ...), using _Pred
+	return (_Is_permutation(_Unchecked(_First1), _Unchecked(_Last1),
+		_Unchecked(_First2), _Pred));
+	}
+
+ #else /* _ITERATOR_DEBUG_LEVEL == 0 */
+template<class _FwdIt1,
+	class _FwdIt2,
+	class _Pr> inline
+	bool _Is_permutation2(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2, _Pr _Pred, true_type)
+	{	// test if [_First1, _Last1) == permuted [_First2, ...),
+		// using _Pred, checked input
+	return (_Is_permutation(_First1, _Last1,
+		_First2, _Pred));
+	}
+
+template<class _FwdIt1,
+	class _FwdIt2,
+	class _Pr> inline
+	bool _Is_permutation2(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2, _Pr _Pred, false_type)
+	{	// test if [_First1, _Last1) == permuted [_First2, ...),
+		// using _Pred, unchecked input
+	return (_Is_permutation(_First1, _Last1,
+		_First2, _Pred));
+	}
+
+template<class _FwdIt1,
+	class _FwdIt2,
+	class _Pr> inline
+	bool is_permutation(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2, _Pr _Pred)
+	{	// test if [_First1, _Last1) == permuted [_First2, ...), using _Pred
+	_DEBUG_RANGE_PTR(_First1, _Last1, _First2);
+	_DEBUG_POINTER_IF(_First1 != _Last1, _Pred);
+	return (_Is_permutation2(_Unchecked(_First1), _Unchecked(_Last1),
+		_First2, _Pred, _Is_checked(_First2)));
+	}
+
+template<class _FwdIt1,
+	class _InTy,
+	size_t _InSize,
+	class _Pr> inline
+	bool is_permutation(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_InTy (&_First2)[_InSize], _Pr _Pred)
+	{	// test if [_First1, _Last1) == permuted [_First2, ...), using _Pred
+	return (_STD is_permutation(_First1, _Last1,
+		_Array_iterator<_InTy, _InSize>(_First2), _Pred));
+	}
+ #endif /* _ITERATOR_DEBUG_LEVEL == 0 */
+
+		// TEMPLATE FUNCTION is_permutation
+template<class _FwdIt1,
+	class _FwdIt2> inline
+	bool is_permutation(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2)
+	{	// test if [_First1, _Last1) == permuted [_First2, ...)
+	return (_STD is_permutation(_First1, _Last1,
+		_First2, _FUNCTOR(equal_to, _First1)));
+	}
+
+ #if _HAS_CPP11
+template<class _FwdIt1,
+	class _InTy,
+	size_t _InSize> inline
+	bool is_permutation(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_InTy (&_First2)[_InSize])
+	{	// test if [_First1, _Last1) == permuted [_First2, ...)
+	return (_STD is_permutation(_First1, _Last1, _First2, equal_to<>()));
+	}
+ #endif /* _HAS_CPP11 */
+
+		// TEMPLATE FUNCTION is_permutation WITH TWO RANGES, PRED
+template<class _FwdIt1,
+	class _FwdIt2,
+	class _Pr> inline
+	bool _Is_permutation(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2, _FwdIt2 _Last2, _Pr _Pred,
+		forward_iterator_tag, forward_iterator_tag)
+	{	// test if [_First1, _Last1) == permuted [_First2, _Last2),
+		// using _Pred, arbitrary iterators
+	_DEBUG_POINTER_IF(_First1 != _Last1 && _First2 != _Last2, _Pred);
+	for (; _First1 != _Last1 && _First2 != _Last2; ++_First1, (void)++_First2)
+		if (!_Pred(*_First1, *_First2))
+			{	// found first inequality, check match counts in suffix
+			if (_STD distance(_First1, _Last1)
+				!= _STD distance(_First2, _Last2))
+				return (false);	// lengths differ, fail
+			else
+				return (_Check_match_counts(_First1, _Last1,
+					_First2, _Last2, _Pred));
+			}
+	return (_First1 == _Last1 && _First2 == _Last2);
+	}
+
+template<class _FwdIt1,
+	class _FwdIt2,
+	class _Pr> inline
+	bool _Is_permutation(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2, _FwdIt2 _Last2, _Pr _Pred,
+		random_access_iterator_tag, random_access_iterator_tag)
+	{	// test if [_First1, _Last1) == permuted [_First2, _Last2),
+		// using _Pred, random-access iterators
+	if (_Last1 - _First1 != _Last2 - _First2)
+		return (false);
+	_DEBUG_POINTER_IF(_First1 != _Last1, _Pred);
+	return (_Is_permutation(_First1, _Last1, _First2, _Pred));
+	}
+
+template<class _FwdIt1,
+	class _FwdIt2,
+	class _Pr> inline
+	bool is_permutation(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2, _FwdIt2 _Last2, _Pr _Pred)
+	{	// test if [_First1, _Last1) == permuted [_First2, _Last2),
+		// using _Pred
+	_DEBUG_RANGE(_First1, _Last1);
+	_DEBUG_RANGE(_First2, _Last2);
+	return (_Is_permutation(_Unchecked(_First1), _Unchecked(_Last1),
+		_Unchecked(_First2), _Unchecked(_Last2), _Pred,
+		_Iter_cat(_First1), _Iter_cat(_First2)));
+	}
+
+		// TEMPLATE FUNCTION is_permutation WITH TWO RANGES
+template<class _FwdIt1,
+	class _FwdIt2> inline
+	bool is_permutation(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2, _FwdIt2 _Last2)
+	{	// test if [_First1, _Last1) == permuted [_First2, _Last2)
+	return (_STD is_permutation(_First1, _Last1,
+		_First2, _Last2, _FUNCTOR(equal_to, _First1)));
+	}
+
+		// TEMPLATE FUNCTION reverse
+template<class _BidIt> inline
+	void _Reverse(_BidIt _First, _BidIt _Last, bidirectional_iterator_tag)
+	{	// reverse elements in [_First, _Last), bidirectional iterators
+	for (; _First != _Last && _First != --_Last; ++_First)
+		_STD iter_swap(_First, _Last);
+	}
+
+template<class _BidIt> inline
+	void reverse(_BidIt _First, _BidIt _Last)
+	{	// reverse elements in [_First, _Last)
+	_DEBUG_RANGE(_First, _Last);
+	_Reverse(_Unchecked(_First), _Unchecked(_Last), _Iter_cat(_First));
+	}
+
+ #if _HAS_CPP17
+		// TEMPLATE FUNCTION _Do_reverse_par
+template <class _BidIt> inline
+	void _Do_reverse_par(
+		_BidIt _First, _BidIt _Last,
+			execution::_Parallel_policy _Exec)
+    {	// perform function in parallel
+    _BidIt _Mid = std::next(_First, std::distance(_First, _Last) / 2);
+    _Swap_ranges_par(_First, _Mid, _STD reverse_iterator<_BidIt>(_Last),
+    	_Exec);
+    }
+
+		// TEMPLATE FUNCTION _Reverse_par
+template <class _BidIt> inline
+	void _Reverse_par(
+		_BidIt _First, _BidIt _Last,
+			execution::_Parallel_policy _Exec)
+    {	// perform function in parallel
+	_DEBUG_RANGE(_First, _Last);
+	_Do_reverse_par(_Unchecked(_First), _Unchecked(_Last), _Exec);
+    }
+
+template <class _BidIt> inline
+	void _Reverse_par(
+		_BidIt _First, _BidIt _Last,
+			execution::sequenced_policy)
+    {	// perform function sequentially
+    _TRY_BEGIN
+    	_STD reverse(_First, _Last);
+    _CATCH_PAR_END
+    }
+
+        // TEMPLATE FUNCTION PARALLEL reverse
+template<class _Policy,
+    class _BidIt,
+    class = typename enable_if<is_execution_policy<decay_t<_Policy> >::value,
+        void>::type> inline
+    void reverse(_Policy&& _Exec,
+        _BidIt _First, _BidIt _Last)
+    {   // reverse elements in [_First, _Last)
+    _Reverse_par(_First, _Last,
+    	_GET_POLICY(_First, _Exec));
+    }
+ #endif /* _HAS_CPP17 */
+
+		// TEMPLATE FUNCTION rotate
+template<class _FwdIt> inline
+	_FwdIt _Rotate(_FwdIt _First, _FwdIt _Mid, _FwdIt _Last,
+		forward_iterator_tag)
+	{	// rotate [_First, _Last), forward iterators
+	for (_FwdIt _Next = _Mid, _Res = _Last; ; )
+		{	// swap [_First, ...) into place
+		_STD iter_swap(_First, _Next);
+		if (++_First == _Mid)
+			{	// quit if done, else define next interval
+			if (++_Next == _Last)
+				return (_Res == _Last ? _Mid : _Res);
+			else
+				_Mid = _Next;	// mark end of next interval
+			}
+		else if (++_Next == _Last)
+			{	// wrap to last end
+			if (_Res == _Last)
+				_Res = _First;
+			_Next = _Mid;
+			}
+		}
+	}
+
+template<class _BidIt> inline
+	pair<_BidIt, _BidIt> _Reverse_until_sentinel(
+		_BidIt _First, _BidIt _Sentinel, _BidIt _Last)
+	{	// reverse until either _First or _Last hits _Sentinel
+	while (_First != _Sentinel && _Last != _Sentinel)
+		_STD iter_swap(_First++, --_Last);
+	return (_STD make_pair(_First, _Last));
+	}
+
+template<class _BidIt> inline
+	_BidIt _Rotate(_BidIt _First, _BidIt _Mid, _BidIt _Last,
+		bidirectional_iterator_tag)
+	{	// rotate [_First, _Last), bidirectional iterators
+	_STD reverse(_First, _Mid);
+	_STD reverse(_Mid, _Last);
+	pair<_BidIt, _BidIt> _Tmp = _Reverse_until_sentinel(_First, _Mid, _Last);
+	_STD reverse(_Tmp.first, _Tmp.second);
+	return (_Mid != _Tmp.first ? _Tmp.first : _Tmp.second);
+	}
+
+template<class _RanIt> inline
+	_RanIt _Rotate(_RanIt _First, _RanIt _Mid, _RanIt _Last,
+		random_access_iterator_tag)
+	{	// rotate [_First, _Last), random-access iterators
+	_STD reverse(_First, _Mid);
+	_STD reverse(_Mid, _Last);
+	_STD reverse(_First, _Last);
+	return (_First + (_Last - _Mid));
+	}
+
+template<class _FwdIt> inline
+	_FwdIt rotate(_FwdIt _First, _FwdIt _Mid, _FwdIt _Last)
+	{	// rotate [_First, _Last)
+	_DEBUG_RANGE(_First, _Mid);
+	_DEBUG_RANGE(_Mid, _Last);
+	if (_First == _Mid)
+		return (_Last);
+	if (_Mid == _Last)
+		return (_First);
+	_Rechecked(_First, _Rotate(_Unchecked(_First), _Unchecked(_Mid),
+		_Unchecked(_Last), _Iter_cat(_First)));
+	return (_First);
+	}
+
+ #if _HAS_CPP17
+const size_t _ROTATE_PAR_THRESHOLD = 100;
+
+template<class _FwdIt>
+	_FwdIt _Do_rotate_par(
+		_FwdIt _First, _FwdIt _Mid, _FwdIt _Last,
+			execution::_Parallel_policy _Exec)
+	{	// perform Gries-Mills algorithm with parallel swaps
+	typedef typename _STD iterator_traits<_FwdIt>::difference_type _Diff;
+	_Diff _Count1 = _STD distance(_First, _Mid);
+	_Diff _Count2 = _STD distance(_Mid, _Last);
+	_FwdIt _Res = _Count1 < _Count2
+		? _STD next(_Mid, _Count2 - _Count1)
+		: _STD next(_First, _Count1 - _Count2);
+	while (_Count2 < _Count1 * _ROTATE_PAR_THRESHOLD
+		&& _Count1 < _Count2 * _ROTATE_PAR_THRESHOLD)
+		{	// swap smaller block with end of larger
+		if (_Count1 < _Count2)
+			{	// swap left block with end of right
+			_FwdIt _Temp = _STD next(_Mid, _Count2 - _Count1);
+			_STD _Do_swap_ranges_par(_First, _Mid, _Temp, _Exec);
+			_Last = _Temp;
+			_Count2 -= _Count1;
+			}
+		else if (_Count2 < _Count1)
+			{	// swap right block with end of left
+			_FwdIt _Temp = _STD next(_First, _Count1 - _Count2);
+			_STD _Do_swap_ranges_par(_Temp, _Mid, _Mid, _Exec);
+			_Last = _Mid;
+			_Mid = _Temp;
+			_Count1 -= _Count2;
+			}
+		else
+			{	// swap left and right; done
+			_STD _Do_swap_ranges_par(_First, _Mid, _Mid, _Exec);
+			return (_Res);
+			}
+		}
+	_STD rotate(_First, _Mid, _Last);
+	return (_Res);
+	}
+
+template <class _FwdIt>
+	_FwdIt _Rotate_par(
+		_FwdIt _First, _FwdIt _Mid, _FwdIt _Last,
+			execution::_Parallel_policy _Exec)
+	{	// perform function in parallel
+	_DEBUG_RANGE(_First, _Mid);
+	_DEBUG_RANGE(_Mid, _Last);
+	return (_Rechecked(_First,
+			_Do_rotate_par(_Unchecked(_First), _Unchecked(_Mid),
+			_Unchecked(_Last), _Exec)));
+	}
+
+template <class _FwdIt>
+	_FwdIt _Rotate_par(
+		_FwdIt _First, _FwdIt _Mid, _FwdIt _Last,
+			execution::sequenced_policy)
+	{	// perform function in parallel
+	_TRY_BEGIN
+		return (_STD rotate(_First, _Mid, _Last));
+	_CATCH_PAR_END
+	return (_First);	// to quiet diagnostics
+	}
+
+template<class _Policy,
+	class _FwdIt,
+	class = enable_if_t<is_execution_policy<decay_t<_Policy> >::value,
+		void> > inline
+	_FwdIt rotate(_Policy&& _Exec,
+		_FwdIt _First, _FwdIt _Mid, _FwdIt _Last)
+	{	// rotate [_First, _Last)
+	return (_Rotate_par(_First, _Mid, _Last,
+		_GET_POLICY(_First, _Exec)));
+	}
+ #endif /* _HAS_CPP17 */
+
+		// TEMPLATE FUNCTION search WITH PRED
+template<class _FwdIt1,
+	class _FwdIt2,
+	class _Diff1,
+	class _Diff2,
+	class _Pr> inline
+	_FwdIt1 _Search(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2, _FwdIt2 _Last2, _Pr _Pred, _Diff1 *, _Diff2 *,
+		forward_iterator_tag, forward_iterator_tag)
+	{	// find first [_First2, _Last2) satisfying _Pred, arbitrary iterators
+	for (; ; ++_First1)
+		{	// loop until match or end of a sequence
+		_FwdIt1 _Mid1 = _First1;
+		for (_FwdIt2 _Mid2 = _First2; ; ++_Mid1, (void)++_Mid2)
+			if (_Mid2 == _Last2)
+				return (_First1);
+			else if (_Mid1 == _Last1)
+				return (_Last1);
+			else if (!_Pred(*_Mid1, *_Mid2))
+				break;
+		}
+	}
+
+template<class _FwdIt1,
+	class _FwdIt2,
+	class _Diff1,
+	class _Diff2,
+	class _Pr> inline
+	_FwdIt1 _Search(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2, _FwdIt2 _Last2, _Pr _Pred, _Diff1 *, _Diff2 *,
+		random_access_iterator_tag, random_access_iterator_tag)
+	{	// find first [_First2, _Last2) satisfying _Pred, random-access iterators
+	_Diff1 _Count1 = _Last1 - _First1;
+	_Diff2 _Count2 = _Last2 - _First2;
+
+	for (; _Count2 <= _Count1; ++_First1, (void)--_Count1)
+		{	// room for match, try it
+		_FwdIt1 _Mid1 = _First1;
+		for (_FwdIt2 _Mid2 = _First2; ; ++_Mid1, (void)++_Mid2)
+			if (_Mid2 == _Last2)
+				return (_First1);
+			else if (!_Pred(*_Mid1, *_Mid2))
+				break;
+		}
+	return (_Last1);
+	}
+
+template<class _FwdIt1,
+	class _FwdIt2,
+	class _Pr> inline
+	_FwdIt1 search(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2, _FwdIt2 _Last2, _Pr _Pred)
+	{	// find first [_First2, _Last2) satisfying _Pred
+	_DEBUG_RANGE(_First1, _Last1);
+	_DEBUG_RANGE(_First2, _Last2);
+	_DEBUG_POINTER_IF(_First1 != _Last1 && _First2 != _Last2, _Pred);
+	return (_Rechecked(_First1,
+		_Search(_Unchecked(_First1), _Unchecked(_Last1),
+			_Unchecked(_First2), _Unchecked(_Last2), _Pred,
+			_Dist_type(_First1), _Dist_type(_First2),
+			_Iter_cat(_First1), _Iter_cat(_First2))));
+	}
+
+ #if _HAS_CPP17
+		// TEMPLATE CLASS _Search_payload
+template <class _FwdIt1, class _FwdIt2, class _Pr>
+struct _Search_payload
+	: _Payload_base_dual_range<_Overlapping_tiled_range<_FwdIt1>,
+		_Untiled_range<_FwdIt2>>,
+		_Init_value_helper<_Tile_result<_FwdIt1>>
+	{	// payload for parallel search
+	typedef _FwdIt1 _Result_type;
+	typedef _Tile_result<_Result_type> _Tile_result_type;
+	typedef _Payload_base_dual_range<_Overlapping_tiled_range<_FwdIt1>,
+	_Untiled_range<_FwdIt2>> _Mybase;
+	typedef typename _Mybase::_Range_type _Range_type;
+
+	_Search_payload(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2, _FwdIt2 _Last2,
+		 _Pr _Pred_arg,
+			execution::_Parallel_policy& _Exec)
+		: _Mybase(_First1, _Last1, _First2, _Last2,
+			std::distance(_First2, _Last2), _Exec),
+			_Init_value_helper<_Tile_result<_FwdIt1> >(
+				_Tile_result_type(_Last1, (unsigned int)(-1))),
+		_Pred(_Pred_arg)
+		{	// construct with two iterator pairs, predicate, and policy
+		}
+
+	_Tile_result_type _Apply(_Range_type _Range, _Tile_result_type _Previous)
+		{	// perform function for each element in subrange
+		_Tile_result_type _Res(
+			_Search(_Range._First1, _Range._Last1,
+				_Range._First2, _Range._Last2, _Pred,
+			_Dist_type(_Range._First1), _Dist_type(_Range._First2),
+			_Iter_cat(_Range._First1), _Iter_cat(_Range._First2)),
+			_Range._Index);
+		return (this->_Maybe_short_circuit(_Res, _Range._Last1, _Previous));
+		}
+
+	static _Tile_result_type _Reduce(_Tile_result_type _Lhs,
+		_Tile_result_type _Rhs)
+		{	// combine values from subranges
+		return (_Lhs._Index < _Rhs._Index ? _Lhs : _Rhs);
+		}
+
+	_Result_type _Get(_Tile_result_type _Res) const
+		{	// extract result
+		return (_Res._Value);
+		}
+
+	_Pr _Pred;
+	};
+
+		// TEMPLATE FUNCTION _Do_search_par
+template<class _FwdIt1,
+	class _FwdIt2,
+	class _Pr> inline
+	_FwdIt1 _Do_search_par(
+		_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2, _FwdIt2 _Last2, _Pr _Pred,
+			execution::_Parallel_policy _Exec)
+	{	// perform function in parallel
+	typedef _Search_payload<_FwdIt1, _FwdIt2, _Pr> _MyPy;
+	_MyPy _Payload(_First1, _Last1, _First2, _Last2, _Pred, _Exec);
+	_Master_task_with_result<_MyPy> _Master(_Payload);
+	_Master._Launch();
+	return (_Master._Get());
+	}
+
+		// TEMPLATE FUNCTION _Search_par
+template<class _FwdIt1,
+	class _FwdIt2,
+	class _Pr> inline
+	_FwdIt1 _Search_par(
+		_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2, _FwdIt2 _Last2, _Pr _Pred,
+			execution::_Parallel_policy _Exec)
+	{	// perform function in parallel
+	_DEBUG_RANGE(_First1, _Last1);
+	_DEBUG_RANGE(_First2, _Last2);
+	_DEBUG_POINTER_IF(_First1 != _Last1 && _First2 != _Last2, _Pred);
+	return (_Rechecked(_First1,
+		_Do_search_par(_Unchecked(_First1), _Unchecked(_Last1),
+		_Unchecked(_First2), _Unchecked(_Last2), _Pred, _Exec)));
+	}
+
+template <class _FwdIt1,
+	class _FwdIt2,
+	class _Pr> inline
+	_FwdIt1 _Search_par(
+		_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2, _FwdIt2 _Last2, _Pr _Pred,
+			execution::sequenced_policy)
+	{	// perform function sequentially
+	_TRY_BEGIN
+		return (_STD search(_First1, _Last1, _First2, _Last2, _Pred));
+	_CATCH_PAR_END
+	return (_First1);	// to quiet diagnostics
+	}
+
+template<class _Policy,
+	class _FwdIt1,
+	class _FwdIt2,
+	class _Pr,
+	class = enable_if_t<is_execution_policy<decay_t<_Policy> >::value,
+		void> > inline
+	_FwdIt1 search(_Policy&& _Exec,
+		_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2, _FwdIt2 _Last2, _Pr _Pred)
+	{	// find first [_First2, _Last2) satisfying _Pred
+	return (_Search_par(_First1, _Last1, _First2, _Last2, _Pred,
+		_GET_POLICY2(_First1, _First2, _Exec)));
+	}
+ #endif /* _HAS_CPP17 */
+
+		// TEMPLATE FUNCTION search
+template<class _FwdIt1,
+	class _FwdIt2> inline
+	_FwdIt1 search(_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2, _FwdIt2 _Last2)
+	{	// find first [_First2, _Last2) match
+	return (_STD search(_First1, _Last1, _First2, _Last2,
+		_FUNCTOR(equal_to, _First1)));
+	}
+
+ #if _HAS_CPP17
+template<class _Policy,
+	class _FwdIt1,
+	class _FwdIt2,
+	class = enable_if_t<is_execution_policy<decay_t<_Policy> >::value,
+		void> > inline
+	_FwdIt1 search(_Policy&& _Exec,
+		_FwdIt1 _First1, _FwdIt1 _Last1,
+		_FwdIt2 _First2, _FwdIt2 _Last2)
+	{	// find first [_First2, _Last2)
+	return (_Search_par(_First1, _Last1, _First2, _Last2,
+		_FUNCTOR(equal_to, _First1),
+		_GET_POLICY2(_First1, _First2, _Exec)));
+	}
+ #endif /* _HAS_CPP17 */
+
+	// TEMPLATE CLASS _Rng_from_urng
+template<class _Diff,
+	class _Urng>
+	class _Rng_from_urng
+	{	// wrap a URNG as an RNG
+public:
+ #if _HAS_CPP11
+	typedef make_unsigned_t<_Diff> _Ty0;
+	typedef typename _Urng::result_type _Ty1;
+
+	typedef typename _If<sizeof (_Ty1) < sizeof (_Ty0),
+		_Ty0, _Ty1>::type _Udiff;
+
+ #else /* _HAS_CPP11 */
+	typedef size_t _Udiff;
+ #endif /* _HAS_CPP11 */
+
+	explicit _Rng_from_urng(_Urng& _Func)
+		: _Ref(_Func), _Bits(CHAR_BIT * sizeof (_Udiff)), _Bmask(_Udiff(-1))
+		{	// construct from URNG
+		for (; (_Urng::max)() - (_Urng::min)() < _Bmask; _Bmask >>= 1)
+			--_Bits;
+		}
+
+	_Diff operator()(_Diff _Index)
+		{	// adapt _Urng closed range to [0, _Index)
+		for (; ; )
+			{	// try a sample random value
+			_Udiff _Ret = 0;	// random bits
+			_Udiff _Mask = 0;	// 2^N - 1, _Ret is within [0, _Mask]
+
+			while (_Mask < _Udiff(_Index - 1))
+				{	// need more random bits
+				_Ret <<= _Bits - 1;	// avoid full shift
+				_Ret <<= 1;
+				_Ret |= _Get_bits();
+				_Mask <<= _Bits - 1;	// avoid full shift
+				_Mask <<= 1;
+				_Mask |= _Bmask;
+				}
+
+			// _Ret is [0, _Mask], _Index - 1 <= _Mask, return if unbiased
+			if (_Ret / _Index < _Mask / _Index
+				|| _Mask % _Index == _Udiff(_Index - 1))
+				return (_Ret % _Index);
+			}
+		}
+
+	_Udiff _Get_all_bits()
+		{	// return a random value
+		_Udiff _Ret = 0;
+
+		for (size_t _Num = 0; _Num < CHAR_BIT * sizeof (_Udiff);
+			_Num += _Bits)
+			{	// don't mask away any bits
+			_Ret <<= _Bits - 1;	// avoid full shift
+			_Ret <<= 1;
+			_Ret |= _Get_bits();
+			}
+
+		return (_Ret);
+		}
+
+	_Rng_from_urng(const _Rng_from_urng&) = delete;
+	_Rng_from_urng& operator=(const _Rng_from_urng&) = delete;
+
+private:
+	_Udiff _Get_bits()
+		{	// return a random value within [0, _Bmask]
+		for (; ; )
+			{	// repeat until random value is in range
+			_Udiff _Val = _Ref() - (_Urng::min)();
+
+			if (_Val <= _Bmask)
+				return (_Val);
+			}
+		}
+
+	_Urng& _Ref;	// reference to URNG
+	size_t _Bits;	// number of random bits generated by _Get_bits()
+	_Udiff _Bmask;	// 2^_Bits - 1
+	};
+
+		// TEMPLATE CLASS _Yarn
+template<class _Elem>
+	class _Yarn
+	{	// wrap a NTBS
+public:
+	typedef _Yarn<_Elem> _Myt;
+
+	_Yarn()
+		: _Myptr(0), _Nul(0)
+		{	// default construct
+		}
+
+	_Yarn(const _Myt& _Right)
+		: _Myptr(0), _Nul(0)
+		{	// construct from _Yarn
+		*this = _Right;
+		}
+
+	_Yarn(const _Elem *_Right)
+		: _Myptr(0), _Nul(0)
+		{	// construct from NTBS
+		*this = _Right;
+		}
+
+	_Myt& operator=(const _Myt& _Right)
+		{	// assign from _Yarn
+		return (*this = _Right._Myptr);
+		}
+
+	_Myt& operator=(const _Elem *_Right)
+		{	// assign from NTBS
+		if (_Myptr != _Right)
+			{	// new value, discard old and copy new
+			_Tidy();
+
+			if (_Right != 0)
+				{	// new is not empty, copy it
+				const _Elem *_Ptr = _Right;
+				while (*_Ptr != (_Elem)0)
+					++_Ptr;
+				size_t _Count = ((const char *)++_Ptr - (const char *)_Right);
+
+				_Myptr = (_Elem *)_CSTD malloc(_Count);
+				if (_Myptr != 0)
+					_CSTD memcpy(_Myptr, _Right, _Count);
+				}
+			}
+		return (*this);
+		}
+
+	~_Yarn() _NOEXCEPT
+		{	// destroy the object
+		_Tidy();
+		}
+
+	bool empty() const
+		{	// test if empty string
+		return (_Myptr == 0);
+		}
+
+	const _Elem *c_str() const
+		{	// return NTBS
+		return (_Myptr != 0 ? _Myptr : &_Nul);
+		}
+
+private:
+	void _Tidy()
+		{	// discard any string
+		if (_Myptr != 0)
+			_CSTD free(_Myptr);
+
+		_Myptr = 0;
+		}
+
+	_Elem *_Myptr;	// pointer to allocated string
+	_Elem _Nul;		// nul terminator for unallocated string
+	};
+
+	// TEMPLATE STRUCT _Has_allocator_type
+template<class _Ty,
+	class _Alloc>
+	struct _Has_allocator_type
+	{	// tests for suitable _Ty::allocator_type
+ #if _HAS_CPP17
+	template<class _Uty>
+		static auto _Fn(int)
+			-> _Cat_base<is_convertible<_Alloc,
+				typename _Uty::allocator_type>::value>;
+
+ #else /* _HAS_CPP17 */
+	template<class _Uty>
+		static auto _Fn(int)
+			-> is_convertible<_Alloc,
+				typename _Uty::allocator_type>;
+ #endif /* _HAS_CPP17 */
+
+	template<class _Uty>
+		static auto _Fn(_Wrap_int)
+			-> false_type;
+
+	typedef decltype(_Fn<_Ty>(0)) type;
+	};
+
+		// STRUCT allocator_arg_t
+struct allocator_arg_t
+	{	// tag type for added allocator argument
+	explicit allocator_arg_t() = default;
+	};
+
+ #if _HAS_CPP14
+_INLINE_VAR _CONST_DATA allocator_arg_t allocator_arg{};
+ #else /* _HAS_CPP14 */
+_CONST_DATA allocator_arg_t allocator_arg = allocator_arg_t();
+ #endif /* _HAS_CPP14 */
+
+_CRTIMP2P _NO_RETURN(_Xbad_alloc());
+_CRTIMP2P _NO_RETURN(_Xinvalid_argument(const char *));
+_CRTIMP2P _NO_RETURN(_Xlength_error(const char *));
+_CRTIMP2P _NO_RETURN(_Xout_of_range(const char *));
+_CRTIMP2P _NO_RETURN(_Xoverflow_error(const char *));
+_CRTIMP2P _NO_RETURN(_Xruntime_error(const char *));
+
+ #if _HAS_DEDUCTION_GUIDES
+template<class _InIt>
+    using iter_key_t = remove_const_t<
+        typename iterator_traits<_InIt>::value_type::first_type>;
+
+template<class _InIt>
+    using iter_val_t =
+        typename iterator_traits<_InIt>::value_type::second_type;
+
+template<class _InIt>
+    using iter_to_alloc_t = pair<add_const_t<
+        typename iterator_traits<_InIt>::value_type::first_type>,
+        typename iterator_traits<_InIt>::value_type::second_type>;
+
+// _Is_Alloc_v
+template<class _Alloc>
+	struct _Has_alloc_fn
+	{	// test if _Alloc has allocate member function
+private:
+	template<class _Try>
+		static false_type _Test(...);
+	template<class _Try>
+		static true_type _Test(
+			decltype(std::declval<_Try>().allocate(0)));
+public:
+	enum {
+		value = decltype(_Test<_Alloc>(0))::value};
+	};
+
+template<class _Alloc>
+	struct _Has_value_type
+	{	// test if _Alloc has value member type
+private:
+	template<class _Try>
+		static false_type _Test(...);
+	template<class _Try>
+		static true_type _Test(typename _Try::value_type *);
+public:
+	enum {
+		value = decltype(_Test<_Alloc>(0))::value};
+	};
+template<class _Alloc>
+	// test if possibly valid allocator
+	bool _Is_Alloc_v = _Has_alloc_fn<_Alloc>::value
+		&& _Has_value_type<_Alloc>::value;
+
+// _Is_Hash_v
+template<class _Hash>
+	inline constexpr bool _Is_Hash_v =
+		!is_integral_v<_Hash> && !_Is_Alloc_v<_Hash>;
+
+// _Is_InIt_v
+template<class _InIt>
+	// test if possibly valid input iterator
+	bool _Is_InIt_v = !is_integral_v<_InIt>;
+
+// _Is_Pred_v
+template<class _Pred>
+	inline constexpr bool _Is_Pred_v = !_Is_Alloc_v<_Pred>;
+#endif /* _HAS_DEDUCTION_GUIDES */
+_STD_END
+
+namespace std {
+		// TEMPLATE STRUCT uses_allocator
+template<class _Ty,
+	class _Alloc>
+	struct uses_allocator
+		: _Has_allocator_type<_Ty, _Alloc>::type
+	{	// determine whether _Ty has an allocator_type member type
+	};
+
+ #if _HAS_VARIABLE_TEMPLATES
+template<class _Ty,
+	class _Alloc>
+	_INLINE_VAR _CONST_FUN bool uses_allocator_v =
+		uses_allocator<_Ty, _Alloc>::value;
+ #endif /* _HAS_VARIABLE_TEMPLATES */
+}	// namespace std
+
+ #if 0 < _ALT_NS
+_STD_BEGIN
+using std::uses_allocator;
+_STD_END
+
+ #if _HAS_CPP11
+namespace std {
+using _STD begin;
+using _STD end;
+}	// namespace std
+ #endif /* _HAS_CPP11 */
+
+ #endif /* 0 < _ALT_NS */
+
+#endif /* _XUTILITY_ */
+
+/*
+ * Copyright (c) by P.J. Plauger. All rights reserved.
+ * Consult your license regarding permissions and restrictions.
+ * V8.05/17:1422 */

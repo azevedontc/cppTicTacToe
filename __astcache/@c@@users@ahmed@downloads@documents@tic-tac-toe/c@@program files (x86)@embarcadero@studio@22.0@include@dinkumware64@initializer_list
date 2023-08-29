@@ -1,0 +1,84 @@
+﻿// initializer_list standard header
+#ifndef _INITIALIZER_LIST_
+#define _INITIALIZER_LIST_
+#include <cstddef>
+
+ #if _GCC5
+  #include_next <initializer_list>
+
+ #else /* _GCC5 */
+_X_STD_BEGIN
+		// TEMPLATE CLASS initializer_list
+template<class _Elem>
+	class initializer_list
+	{	// list of pointers to elements
+public:
+	typedef _Elem value_type;
+	typedef const _Elem& reference;
+	typedef const _Elem& const_reference;
+	typedef size_t size_type;
+
+	typedef const _Elem *iterator;
+	typedef const _Elem *const_iterator;
+
+	_CONST_FUN initializer_list() _NOEXCEPT
+		: _First(0), _Size(0)
+		{	// empty list
+		}
+
+	_CONST_FUN initializer_list(const _Elem *_First_arg,
+		const _Elem *_Last_arg) _NOEXCEPT
+		: _First(_First_arg), _Size(_Last_arg - _First_arg)
+		{	// construct with pointers
+		}
+
+	_CONST_FUN initializer_list(const _Elem *_First_arg, size_t _Size_arg)
+		: _First(_First_arg), _Size(_Size_arg)
+		{	// construct with pointer and count
+		}
+
+	_CONST_FUN const _Elem *begin() const _NOEXCEPT
+		{	// get beginning of list
+		return (_First);
+		}
+
+	_CONST_FUN const _Elem *end() const _NOEXCEPT
+		{	// get end of list
+		return (_First + _Size);
+		}
+
+	_CONST_FUN size_t size() const _NOEXCEPT
+		{	// get length of list
+		return (_Size);
+		}
+
+private:
+	const _Elem *_First;
+	size_t _Size;
+	};
+_X_STD_END
+_STD_BEGIN
+		// TEMPLATE FUNCTION begin
+template<class _Elem> inline
+	_CONST_FUN const _Elem *begin(
+		_XSTD initializer_list<_Elem> _Ilist) _NOEXCEPT
+	{	// get beginning of sequence
+	return (_Ilist.begin());
+	}
+
+		// TEMPLATE FUNCTION end
+template<class _Elem> inline
+	_CONST_FUN const _Elem *end(
+		_XSTD initializer_list<_Elem> _Ilist) _NOEXCEPT
+	{	// get end of sequence
+	return (_Ilist.end());
+	}
+_STD_END
+ #endif /* _GCC5 */
+
+#endif /* _INITIALIZER_LIST_ */
+
+/*
+ * Copyright (c) by P.J. Plauger. All rights reserved.
+ * Consult your license regarding permissions and restrictions.
+ * V8.05/17:1422 */

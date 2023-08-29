@@ -1,0 +1,103 @@
+﻿// execution standard header
+#ifndef _EXECUTION_
+#define _EXECUTION_
+#include <xstddef>
+
+_STD_BEGIN
+extern int _Get_thread_pool_size();
+
+	namespace execution {
+		// STRUCT _Parallel_policy
+struct _Parallel_policy
+	{	// holds data for tuning parallel algorithms
+	enum _Tile_rule
+		{	// identifies tunable parameters
+		_Multiplier,	// tiles per thread
+		_Count,			// total tiles
+		// _Size		// size of each tile
+		};
+
+	constexpr _Parallel_policy() _NOEXCEPT
+		: _Rule(_Multiplier), _Tile_size(10), _Nthreads(0)
+		{	// default sets tile count to 10 * thread-count
+		}
+
+	int _Tile_count() const _NOEXCEPT
+		{	// return the requested number of tiles
+		switch (_Rule)
+			{	// apply the requested rule
+			case _Multiplier:
+				return (_Tile_size * _Get_thread_pool_size());
+
+			case _Count:
+				return (_Tile_size);
+
+			// case _Size:
+			//	return ((_Range_size + _Tile_size - 1) / _Tile_size);
+			}
+		return (0);	// to quiet diagnostics
+		}
+
+	int _Thread_count() const _NOEXCEPT
+		{	// return the requested number of threads
+		int _Threads = _Get_thread_pool_size();
+		if (_Nthreads == 0 || _Threads < _Nthreads)
+			return (_Threads);
+		else
+			return (_Nthreads);
+		}
+
+	_Tile_rule _Rule;
+	unsigned long long _Tile_size;
+	int _Nthreads;	// 0 for all available; 1 or more specifies count
+	};
+
+		// EXECUTION POLICIES
+class sequenced_policy {};
+class parallel_policy
+	: public _Parallel_policy {};
+class parallel_unsequenced_policy
+	: public _Parallel_policy {};
+		// OBJECTS FOR EXECUTION POLICY
+_INLINE_VAR _CONST_DATA sequenced_policy seq = {};
+_INLINE_VAR _CONST_DATA parallel_policy par = {};
+_INLINE_VAR _CONST_DATA parallel_unsequenced_policy par_unseq = {};
+	}	// namespace execution
+
+		// TEMPLATE CLASS is_execution_policy
+template<class _Ty>
+	struct is_execution_policy
+	: false_type
+	{	// default for unknown policy
+	};
+
+template<>
+	struct is_execution_policy<execution::sequenced_policy>
+	: true_type
+	{	// sequential policy
+	};
+
+template<>
+	struct is_execution_policy<execution::parallel_policy>
+	: true_type
+	{	// parallel policy
+	};
+
+template<>
+	struct is_execution_policy<execution::parallel_unsequenced_policy>
+	: true_type
+	{	// parallel unsequenced policy
+	};
+
+ #if _HAS_VARIABLE_TEMPLATES
+template<class _Ty>
+	_INLINE_VAR _CONST_DATA bool is_execution_policy_v =
+		is_execution_policy<_Ty>::value;
+ #endif /* _HAS_VARIABLE_TEMPLATES */
+_STD_END
+#endif /* _EXECUTION_ */
+
+/*
+ * Copyright (c) by P.J. Plauger. All rights reserved.
+ * Consult your license regarding permissions and restrictions.
+ * V8.05/17:1422 */

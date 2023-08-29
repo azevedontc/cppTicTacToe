@@ -1,0 +1,765 @@
+﻿// utility standard header
+#ifndef _UTILITY_
+#define _UTILITY_
+#include <xstddef>
+//#include <charconv>
+#include <iosfwd>
+#include <type_traits>
+
+_STD_BEGIN
+		// TEMPLATE FUNCTION swap
+template<class _Ty,
+	class = enable_if_t<is_move_constructible<_Ty>::value
+		&& is_move_assignable<_Ty>::value,
+		void> > inline
+	void swap(_Ty& _Left, _Ty& _Right)
+		_NOEXCEPT_OP(is_nothrow_move_constructible<_Ty>::value
+			&& is_nothrow_move_assignable<_Ty>::value)
+	{	// exchange values stored at _Left and _Right
+	_Ty _Tmp(_Move(_Left));
+	_Left = _Move(_Right);
+	_Right = _Move(_Tmp);
+	}
+
+template<class _Ty,
+	size_t _Size,
+	class = enable_if_t<is_swappable<_Ty>::value,
+		void> > inline
+	void swap(_Ty (&_Left)[_Size], _Ty (&_Right)[_Size])
+		_NOEXCEPT_OP(is_nothrow_swappable<_Ty>::value)
+	{	// exchange arrays stored at _Left and _Right
+	if (&_Left != &_Right)
+		{	// worth swapping, swap ranges
+		_Ty *_First1 = _Left;
+		_Ty *_Last1 = _First1 + _Size;
+		_Ty *_First2 = _Right;
+		for (; _First1 != _Last1; ++_First1, ++_First2)
+			swap(*_First1, *_First2);
+		}
+	}
+
+		// TEMPLATE FUNCTION iter_swap (from <algorithm>)
+template<class _FwdIt1,
+	class _FwdIt2> inline
+	void iter_swap(_FwdIt1 _Left, _FwdIt2 _Right)
+	{	// swap *_Left and *_Right
+	swap(*_Left, *_Right);
+	}
+
+		// TEMPLATE FUNCTION _Swap_adl
+template<class _Ty> inline
+	bool _Swap_adl(_Ty& _Left, _Ty& _Right)
+		_NOEXCEPT_OP(_NOEXCEPT_OP((swap(_Left, _Right), true)))
+	{	// exchange values stored at _Left and _Right, using ADL
+	swap(_Left, _Right);
+	return (true);	// for use in _NOEXCEPT_OP
+	}
+
+		// TEMPLATE STRUCT pair
+struct piecewise_construct_t
+	{	// tag type for pair tuple arguments
+	explicit piecewise_construct_t() = default;
+	};
+_CONST_DATA piecewise_construct_t piecewise_construct{};
+template<class...>
+	class tuple;
+
+template<class _Ty1,
+	class _Ty2>
+	struct pair
+	{	// store a pair of values
+	typedef pair<_Ty1, _Ty2> _Myt;
+	typedef _Ty1 first_type;
+	typedef _Ty2 second_type;
+
+	pair(const pair&) = default;
+	pair(pair&&) = default;
+	_Myt& operator=(const _Myt&) = default;	// [sic]
+
+	template<class _Myt1 = _Ty1,
+		class _Myt2 = _Ty2,
+		typename enable_if<is_default_constructible<_Myt1>::value
+			&& is_default_constructible<_Myt2>::value
+			&& is_implicitly_default_constructible<_Myt1>::value
+			&& is_implicitly_default_constructible<_Myt2>::value,
+			bool>::type = true>
+	_CONST_FUN pair()
+		: first(), second()
+		{	// default construct
+		}
+	template<class _Myt1 = _Ty1,
+		class _Myt2 = _Ty2,
+		typename enable_if<is_default_constructible<_Myt1>::value
+			&& is_default_constructible<_Myt2>::value
+			&& !(is_implicitly_default_constructible<_Myt1>::value
+			&& is_implicitly_default_constructible<_Myt2>::value),
+			bool>::type = true>
+	explicit _CONST_FUN pair()
+		: first(), second()
+		{	// explicit default construct
+		}
+
+	template<class _Myt1 = _Ty1,
+		class _Myt2 = _Ty2,
+		typename enable_if<is_copy_constructible<_Myt1>::value
+			&& is_copy_constructible<_Myt2>::value
+#if defined(__CODEGEARC__)
+			&& is_convertible<const _Myt1&, _Myt1>::value
+			&& is_convertible<const _Myt2&, _Myt2>::value,
+#else
+			&& is_implicitly_default_constructible<_Myt1>::value
+			&& is_implicitly_default_constructible<_Myt2>::value,
+#endif			
+			bool>::type = true>
+#if defined(__CODEGEARC__)
+		_CONST_FUN pair(const _Ty1& _Val1, const _Ty2& _Val2)
+#else
+		_CONST_FUN pair(const _Myt1& _Val1, const _Myt2& _Val2)
+#endif
+			: first(_Val1),
+				second(_Val2)
+		{	// copy construct from specified values
+		}
+	template<class _Myt1 = _Ty1,
+		class _Myt2 = _Ty2,
+		typename enable_if<is_copy_constructible<_Myt1>::value
+			&& is_copy_constructible<_Myt2>::value
+#if defined(__CODEGEARC__)
+			&& !(is_convertible<const _Myt1&, _Myt1>::value
+			&& is_convertible<const _Myt2&, _Myt2>::value),
+#else
+			&& !(is_implicitly_default_constructible<_Myt1>::value
+			&& is_implicitly_default_constructible<_Myt2>::value),
+#endif			
+			bool>::type = true>
+#if defined(__CODEGEARC__)
+		explicit _CONST_FUN pair(const _Ty1& _Val1, const _Ty2& _Val2)
+#else
+		explicit _CONST_FUN pair(const _Myt1& _Val1, const _Myt2& _Val2)
+#endif
+			: first(_Val1),
+				second(_Val2)
+		{	// explicit copy construct from specified values
+		}
+
+#if defined(__CODEGEARC__)
+	template<class _Myt1, class _Myt2,
+		typename enable_if<is_constructible<_Ty1, _Myt1>::value
+				   && is_constructible<_Ty2, _Myt2>::value
+			&& is_convertible<_Myt1, _Ty1>::value
+			&& is_convertible<_Myt2, _Ty2>::value,
+			bool>::type = true>
+		_CONST_FUN pair(_Myt1&& _Val1, _Myt2&& _Val2)
+			: first(_STD forward<_Myt1>(_Val1)),
+				second(_STD forward<_Myt2>(_Val2))
+		{	// move construct from specified values
+		}
+	  template<class _Myt1, class _Myt2,
+		 typename enable_if<is_constructible<_Ty1, _Myt1>::value
+			&& is_constructible<_Ty2, _Myt2>::value
+			&& !(is_convertible<_Myt1, _Ty1>::value
+			&& is_convertible<_Myt2, _Ty2>::value),
+			bool>::type = true>
+		explicit _CONST_FUN pair(_Myt1&& _Val1, _Myt2&& _Val2)
+			: first(_STD forward<_Myt1>(_Val1)),
+				second(_STD forward<_Myt2>(_Val2))
+		{	// explicit move construct from specified values
+		}
+#else
+	template<class _Myt1 = _Ty1,
+		class _Myt2 = _Ty2,
+		typename enable_if<is_constructible<_Myt1, _Ty1&&>::value
+			&& is_constructible<_Myt2, _Ty2&&>::value
+			&& is_convertible<_Myt1, _Ty1>::value
+			&& is_convertible<_Myt2, _Ty2>::value,
+			bool>::type = true>
+		_CONST_FUN pair(_Myt1&& _Val1, _Myt2&& _Val2)
+			: first(_STD forward<_Myt1>(_Val1)),
+				second(_STD forward<_Myt2>(_Val2))
+		{	// move construct from specified values
+		}
+	template<class _Myt1 = _Ty1,
+		class _Myt2 = _Ty2,
+		typename enable_if<is_constructible<_Myt1, _Ty1&&>::value
+			&& is_constructible<_Myt2, _Ty2&&>::value
+			&& !(is_convertible<_Myt1, _Ty1>::value
+			&& is_convertible<_Myt2, _Ty2>::value),
+			bool>::type = true>
+		explicit _CONST_FUN pair(_Myt1&& _Val1, _Myt2&& _Val2)
+			: first(_STD forward<_Myt1>(_Val1)),
+				second(_STD forward<_Myt2>(_Val2))
+		{	// explicit move construct from specified values
+		}
+#endif
+
+	template<class _Other1,
+		class _Other2,
+		class _Myt1 = _Ty1,
+		class _Myt2 = _Ty2,
+		typename enable_if<is_constructible<_Myt1, const _Other1&>::value
+			&& is_constructible<_Myt2, const _Other2&>::value
+			&& is_convertible<_Myt1, _Ty1>::value
+			&& is_convertible<_Myt2, _Ty2>::value,
+			bool>::type = true>
+		_CONST_FUN pair(const pair<_Other1, _Other2>& _Right)
+			: first(_Right.first),
+				second(_Right.second)
+		{	// copy construct from pair
+		}
+	template<class _Other1,
+		class _Other2,
+		class _Myt1 = _Ty1,
+		class _Myt2 = _Ty2,
+		typename enable_if<is_constructible<_Myt1, const _Other1&>::value
+			&& is_constructible<_Myt2, const _Other2&>::value
+			&& !(is_convertible<_Myt1, _Ty1>::value
+			&& is_convertible<_Myt2, _Ty2>::value),
+			bool>::type = false>
+		explicit _CONST_FUN pair(const pair<_Other1, _Other2>& _Right)
+			: first(_Right.first),
+				second(_Right.second)
+		{	// explicit copy construct from pair
+		}
+
+	template<class _Other1,
+		class _Other2,
+		class _Myt1 = _Ty1,
+		class _Myt2 = _Ty2,
+		typename enable_if<is_constructible<_Myt1, _Other1&&>::value
+			&& is_constructible<_Myt2, _Other2&&>::value
+			&& is_convertible<_Myt1, _Ty1>::value
+			&& is_convertible<_Myt2, _Ty2>::value,
+			bool>::type = true>
+		_CONST_FUN pair(pair<_Other1, _Other2>&& _Right)
+			: first(_STD forward<_Other1>(_Right.first)),
+				second(_STD forward<_Other2>(_Right.second))
+		{	// move construct from pair
+		}
+	template<class _Other1,
+		class _Other2,
+		class _Myt1 = _Ty1,
+		class _Myt2 = _Ty2,
+		typename enable_if<is_constructible<_Myt1, _Other1&&>::value
+			&& is_constructible<_Myt2, _Other2&&>::value
+			&& !(is_convertible<_Myt1, _Ty1>::value
+			&& is_convertible<_Myt2, _Ty2>::value),
+			bool>::type = true>
+		explicit _CONST_FUN pair(pair<_Other1, _Other2>&& _Right)
+			: first(_STD forward<_Other1>(_Right.first)),
+				second(_STD forward<_Other2>(_Right.second))
+		{	// explicit move construct from pair
+		}
+
+ #if _HAS_DELEGATING_CONSTRUCTORS
+	template<class _Tuple1,
+		class _Tuple2,
+		size_t... _Indexes1,
+		size_t... _Indexes2> inline
+		pair(_Tuple1& _Val1,
+			_Tuple2& _Val2,
+			integer_sequence<size_t, _Indexes1...>,
+			integer_sequence<size_t, _Indexes2...>);
+
+ #else /* _HAS_DELEGATING_CONSTRUCTORS */
+	template<class _Ty,
+		class _Tuple,
+		size_t... _Indexes> inline
+		typename remove_cv<_Ty>::type _Init(
+			_Tuple&, integer_sequence<size_t, _Indexes...>);
+ #endif /* _HAS_DELEGATING_CONSTRUCTORS */
+
+	template<class... _Types1,
+		class... _Types2> inline
+		pair(piecewise_construct_t,
+			tuple<_Types1...> _Val1,
+			tuple<_Types2...> _Val2)
+			_NOEXCEPT_OP((is_nothrow_constructible<_Ty1, _Types1...>::value)
+				&& (is_nothrow_constructible<_Ty2, _Types2...>::value));
+// defined in <tuple>
+
+	template<class _Myt1 = _Ty1,
+		class _Myt2 = _Ty2,
+		class = enable_if_t<is_copy_assignable<_Myt1>::value
+			&& is_copy_assignable<_Myt2>::value,
+			void> >
+		_Myt& operator=(const _Myt& _Right)
+		{	// assign from copied pair
+		first = _Right.first;
+		second = _Right.second;
+		return (*this);
+		}
+
+	template<class _Other1,
+		class _Other2,
+		class = enable_if_t<is_assignable<_Ty1&, const _Other1&>::value
+			&& is_assignable<_Ty2&, const _Other2&>::value,
+			void> >
+		_Myt& operator=(const pair<_Other1, _Other2>& _Right)
+		{	// assign from compatible pair
+		first = _Right.first;
+		second = _Right.second;
+		return (*this);
+		}
+
+	template<class _Myt1 = _Ty1,
+		class _Myt2 = _Ty2,
+		class = enable_if_t<is_move_assignable<_Myt1>::value
+			&& is_move_assignable<_Myt2>::value,
+			void> >
+		_Myt& operator=(_Myt&& _Right)
+			_NOEXCEPT_OP((is_nothrow_move_assignable<_Ty1>::value
+				&& is_nothrow_move_assignable<_Ty2>::value))
+		{	// assign from moved pair
+		first = _STD forward<_Ty1>(_Right.first);
+		second = _STD forward<_Ty2>(_Right.second);
+		return (*this);
+		}
+
+	template<class _Other1,
+		class _Other2,
+		class = enable_if_t<is_assignable<_Ty1&, _Other1&&>::value
+			&& is_assignable<_Ty2&, _Other2&&>::value,
+			void> >
+		_Myt& operator=(pair<_Other1, _Other2>&& _Right)
+		{	// assign from moved compatible pair
+		first = _STD forward<_Other1>(_Right.first);
+		second = _STD forward<_Other2>(_Right.second);
+		return (*this);
+		}
+
+	void swap(_Myt& _Right)
+		_NOEXCEPT_OP(is_nothrow_swappable<_Ty1>::value
+			&& is_nothrow_swappable<_Ty2>::value)
+		{	// exchange contents with _Right
+		if (this != &_Right)
+			{	// different, worth swapping
+			_Swap_adl(first, _Right.first);
+			_Swap_adl(second, _Right.second);
+			}
+		}
+
+	_Ty1 first;	// the first stored value
+	_Ty2 second;	// the second stored value
+	};
+
+		// pair TEMPLATE FUNCTIONS
+template<class _Ty1,
+	class _Ty2,
+	class = enable_if_t<is_swappable<_Ty1>::value
+		&& is_swappable<_Ty2>::value,
+		void> > inline
+	void swap(pair<_Ty1, _Ty2>& _Left, pair<_Ty1, _Ty2>& _Right)
+		_NOEXCEPT_OP(is_nothrow_swappable<_Ty1>::value
+			&& is_nothrow_swappable<_Ty2>::value)
+	{	// swap _Left and _Right pairs
+	_Left.swap(_Right);
+	}
+
+template<class _Ty1,
+	class _Ty2> inline
+	_CONST_FUN bool operator==(const pair<_Ty1, _Ty2>& _Left,
+		const pair<_Ty1, _Ty2>& _Right)
+	{	// test for pair equality
+	return (_Left.first == _Right.first && _Left.second == _Right.second);
+	}
+
+template<class _Ty1,
+	class _Ty2> inline
+	_CONST_FUN bool operator!=(const pair<_Ty1, _Ty2>& _Left,
+		const pair<_Ty1, _Ty2>& _Right)
+	{	// test for pair inequality
+	return (!(_Left == _Right));
+	}
+
+template<class _Ty1,
+	class _Ty2> inline
+	_CONST_FUN bool operator<(const pair<_Ty1, _Ty2>& _Left,
+		const pair<_Ty1, _Ty2>& _Right)
+	{	// test if _Left < _Right for pairs
+	return (_Left.first < _Right.first
+		|| (!(_Right.first < _Left.first) && _Left.second < _Right.second));
+	}
+
+template<class _Ty1,
+	class _Ty2> inline
+	_CONST_FUN bool operator>(const pair<_Ty1, _Ty2>& _Left,
+		const pair<_Ty1, _Ty2>& _Right)
+	{	// test if _Left > _Right for pairs
+	return (_Right < _Left);
+	}
+
+template<class _Ty1,
+	class _Ty2> inline
+	_CONST_FUN bool operator<=(const pair<_Ty1, _Ty2>& _Left,
+		const pair<_Ty1, _Ty2>& _Right)
+	{	// test if _Left <= _Right for pairs
+	return (!(_Right < _Left));
+	}
+
+template<class _Ty1,
+	class _Ty2> inline
+	_CONST_FUN bool operator>=(const pair<_Ty1, _Ty2>& _Left,
+		const pair<_Ty1, _Ty2>& _Right)
+	{	// test if _Left >= _Right for pairs
+	return (!(_Left < _Right));
+	}
+
+	// TEMPLATE FUNCTION make_pair
+template<class _Ty1,
+	class _Ty2> inline
+	_CONST_FUN pair<typename _Unrefwrap<_Ty1>::type,
+		typename _Unrefwrap<_Ty2>::type>
+		make_pair(_Ty1&& _Val1, _Ty2&& _Val2)
+	{	// return pair composed from arguments
+	typedef pair<typename _Unrefwrap<_Ty1>::type,
+		typename _Unrefwrap<_Ty2>::type> _Mypair;
+	return (_Mypair(_STD forward<_Ty1>(_Val1),
+		_STD forward<_Ty2>(_Val2)));
+	}
+
+		// TEMPLATE OPERATORS
+	namespace rel_ops
+		{	// nested namespace to hide relational operators from std
+template<class _Ty> inline
+	bool operator!=(const _Ty& _Left, const _Ty& _Right)
+	{	// test for inequality, in terms of equality
+	return (!(_Left == _Right));
+	}
+
+template<class _Ty> inline
+	bool operator>(const _Ty& _Left, const _Ty& _Right)
+	{	// test if _Left > _Right, in terms of operator<
+	return (_Right < _Left);
+	}
+
+template<class _Ty> inline
+	bool operator<=(const _Ty& _Left, const _Ty& _Right)
+	{	// test if _Left <= _Right, in terms of operator<
+	return (!(_Right < _Left));
+	}
+
+template<class _Ty> inline
+	bool operator>=(const _Ty& _Left, const _Ty& _Right)
+	{	// test if _Left >= _Right, in terms of operator<
+	return (!(_Left < _Right));
+	}
+		}
+_STD_END
+
+_STD_BEGIN
+template<class _Ty,
+	_INT_OR_SIZE_T _Size>
+	class array;
+
+	// TEMPLATE STRUCT tuple_size
+template<class _Tuple>
+	struct tuple_size;
+
+template<class _Ty,
+	size_t _Size>
+	struct tuple_size<array<_Ty, _Size> >
+		: integral_constant<size_t, _Size>
+	{	// struct to determine number of elements in array
+	};
+
+template<class _Ty1,
+	class _Ty2>
+	struct tuple_size<pair<_Ty1, _Ty2> >
+	: integral_constant<size_t, 2>
+	{	// size of pair
+	};
+
+template<class... _Types>
+	struct tuple_size<tuple<_Types...> >
+	: integral_constant<size_t, sizeof...(_Types)>
+	{	// size of tuple
+	};
+
+template<class _Tuple>
+	struct tuple_size<const _Tuple>
+	: integral_constant<size_t, tuple_size<_Tuple>::value>
+	{	// size of const tuple
+	};
+
+template<class _Tuple>
+	struct tuple_size<volatile _Tuple>
+	: integral_constant<size_t, tuple_size<_Tuple>::value>
+	{	// size of volatile tuple
+	};
+
+template<class _Tuple>
+	struct tuple_size<const volatile _Tuple>
+	: integral_constant<size_t, tuple_size<_Tuple>::value>
+	{	// size of const volatile tuple
+	};
+
+ #if _HAS_VARIABLE_TEMPLATES
+template<class _Tuple>
+	_INLINE_VAR _CONST_DATA size_t tuple_size_v = tuple_size<_Tuple>::value;
+ #endif /* _HAS_VARIABLE_TEMPLATES */
+
+	// CLASS tuple_element (find element by index)
+template<size_t _Index,
+	class _Tuple>
+	struct tuple_element;
+
+template<size_t _Idx,
+	class _Ty,
+	_INT_OR_SIZE_T _Size>
+	struct tuple_element<_Idx, array<_Ty, _Size> >
+	{	// struct to determine type of element _Idx in array
+	tuple_element()
+		{	// default construct
+		_STATIC_ASSERT2(_Idx < _Size, "array index out of bounds");
+		}
+
+	typedef _Ty type;
+	};
+
+template<class _Ty1,
+	class _Ty2>
+	struct tuple_element<0, pair<_Ty1, _Ty2> >
+	{	// struct to determine type of element 0 in pair
+	typedef _Ty1 type;
+	};
+
+template<class _Ty1,
+	class _Ty2>
+	struct tuple_element<1, pair<_Ty1, _Ty2> >
+	{	// struct to determine type of element 1 in pair
+	typedef _Ty2 type;
+	};
+
+template<size_t _Index>
+	struct tuple_element<_Index, tuple<> >
+	{	// enforce bounds checking
+	static_assert(_Always_false<integral_constant<size_t, _Index> >::value,
+		"tuple index out of bounds");
+	};
+
+template<class _This,
+	class... _Rest>
+	struct tuple_element<0, tuple<_This, _Rest...> >
+	{	// select first element
+	typedef _This type;
+	typedef tuple<_This, _Rest...> _Ttype;
+	};
+
+template<size_t _Index,
+	class _This,
+	class... _Rest>
+	struct tuple_element<_Index, tuple<_This, _Rest...> >
+		: public tuple_element<_Index - 1, tuple<_Rest...> >
+	{	// recursive tuple_element definition
+	};
+
+template<size_t _Index,
+	class _Tuple>
+	struct tuple_element<_Index, const _Tuple>
+		: public tuple_element<_Index, _Tuple>
+	{	// tuple_element for const
+	typedef tuple_element<_Index, _Tuple> _Mybase;
+	typedef typename add_const<typename _Mybase::type>::type type;
+	};
+
+template<size_t _Index,
+	class _Tuple>
+	struct tuple_element<_Index, volatile _Tuple>
+		: public tuple_element<_Index, _Tuple>
+	{	// tuple_element for volatile
+	typedef tuple_element<_Index, _Tuple> _Mybase;
+	typedef typename add_volatile<typename _Mybase::type>::type type;
+	};
+
+template<size_t _Index,
+	class _Tuple>
+	struct tuple_element<_Index, const volatile _Tuple>
+		: public tuple_element<_Index, _Tuple>
+	{	// tuple_element for const volatile
+	typedef tuple_element<_Index, _Tuple> _Mybase;
+	typedef typename add_cv<typename _Mybase::type>::type type;
+	};
+
+ #if _HAS_TEMPLATE_ALIAS
+template<size_t _Index,
+	class _Tuple>
+	using tuple_element_t = typename tuple_element<_Index, _Tuple>::type;
+ #endif /* _HAS_TEMPLATE_ALIAS */
+
+	// TUPLE INTERFACE TO pair
+template<class _Ret,
+	class _Pair> inline
+	_CONST_FUN _Ret _Pair_get(_Pair& _Pr,
+		integral_constant<size_t, 0>) _NOEXCEPT
+	{	// get reference to element 0 in pair _Pr
+	return (_Pr.first);
+	}
+
+template<class _Ret,
+	class _Pair> inline
+	_CONST_FUN _Ret _Pair_get(_Pair& _Pr,
+		integral_constant<size_t, 1>) _NOEXCEPT
+	{	// get reference to element 1 in pair _Pr
+	return (_Pr.second);
+	}
+
+template<size_t _Idx,
+	class _Ty1,
+	class _Ty2> inline
+	_CONST_FUN typename tuple_element<_Idx, pair<_Ty1, _Ty2> >::type&
+		get(pair<_Ty1, _Ty2>& _Pr) _NOEXCEPT
+	{	// get reference to element at _Idx in pair _Pr
+	typedef typename tuple_element<_Idx, pair<_Ty1, _Ty2> >::type& _Rtype;
+	return (_Pair_get<_Rtype>(_Pr, integral_constant<size_t, _Idx>()));
+	}
+
+template<class _Ty1,
+	class _Ty2> inline
+	_CONST_FUN _Ty1& get(pair<_Ty1, _Ty2>& _Pr) _NOEXCEPT
+	{	// get reference to element _Ty1 in pair _Pr
+	return (_STD get<0>(_Pr));
+	}
+
+template<class _Ty2,
+	class _Ty1> inline
+	_CONST_FUN _Ty2& get(pair<_Ty1, _Ty2>& _Pr) _NOEXCEPT
+	{	// get reference to element _Ty2 in pair _Pr
+	return (_STD get<1>(_Pr));
+	}
+
+template<size_t _Idx,
+	class _Ty1,
+	class _Ty2> inline
+	_CONST_FUN const typename tuple_element<_Idx, pair<_Ty1, _Ty2> >::type&
+		get(const pair<_Ty1, _Ty2>& _Pr) _NOEXCEPT
+	{	// get const reference to element at _Idx in pair _Pr
+	typedef const typename tuple_element<_Idx, pair<_Ty1, _Ty2> >::type&
+		_Ctype;
+	return (_Pair_get<_Ctype>(_Pr, integral_constant<size_t, _Idx>()));
+	}
+
+template<class _Ty1,
+	class _Ty2> inline
+	_CONST_FUN const _Ty1& get(const pair<_Ty1, _Ty2>& _Pr) _NOEXCEPT
+	{	// get const reference to element _Ty1 in pair _Pr
+	return (_STD get<0>(_Pr));
+	}
+
+template<class _Ty2,
+	class _Ty1> inline
+	_CONST_FUN const _Ty2& get(const pair<_Ty1, _Ty2>& _Pr) _NOEXCEPT
+	{	// get const reference to element _Ty2 in pair _Pr
+	return (_STD get<1>(_Pr));
+	}
+
+template<size_t _Idx,
+	class _Ty1,
+	class _Ty2> inline
+	_CONST_FUN typename tuple_element<_Idx, pair<_Ty1, _Ty2> >::type&&
+		get(pair<_Ty1, _Ty2>&& _Pr) _NOEXCEPT
+	{	// get rvalue reference to element at _Idx in pair _Pr
+	typedef typename tuple_element<_Idx, pair<_Ty1, _Ty2> >::type&& _RRtype;
+	return (_STD forward<_RRtype>(_STD get<_Idx>(_Pr)));
+	}
+
+template<class _Ty1,
+	class _Ty2> inline
+	_CONST_FUN _Ty1&& get(pair<_Ty1, _Ty2>&& _Pr) _NOEXCEPT
+	{	// get rvalue reference to element _Ty1 in pair _Pr
+	return (_STD get<0>(_STD move(_Pr)));
+	}
+
+template<class _Ty2,
+	class _Ty1> inline
+	_CONST_FUN _Ty2&& get(pair<_Ty1, _Ty2>&& _Pr) _NOEXCEPT
+	{	// get rvalue reference to element _Ty2 in pair _Pr
+	return (_STD get<1>(_STD move(_Pr)));
+	}
+
+ #if _HAS_CPP17
+template<size_t _Idx,
+	class _Ty1,
+	class _Ty2> inline
+	_CONST_FUN const typename tuple_element<_Idx, pair<_Ty1, _Ty2> >::type&&
+		get(const pair<_Ty1, _Ty2>&& _Pr) _NOEXCEPT
+	{	// get const rvalue reference to element at _Idx in pair _Pr
+	typedef typename tuple_element<_Idx, pair<_Ty1, _Ty2> >::type&& _RRtype;
+	return (_STD forward<_RRtype>(_STD get<_Idx>(_Pr)));
+	}
+
+template<class _Ty1,
+	class _Ty2> inline
+	_CONST_FUN const _Ty1&& get(const pair<_Ty1, _Ty2>&& _Pr) _NOEXCEPT
+	{	// get const rvalue reference to element _Ty1 in pair _Pr
+	return (_STD get<0>(_STD move(_Pr)));
+	}
+
+template<class _Ty2,
+	class _Ty1> inline
+	_CONST_FUN const _Ty2&& get(const pair<_Ty1, _Ty2>&& _Pr) _NOEXCEPT
+	{	// get const rvalue reference to element _Ty2 in pair _Pr
+	return (_STD get<1>(_STD move(_Pr)));
+	}
+ #endif /* _HAS_CPP17 */
+
+	// TEMPLATE FUNCTION exchange
+template<class _Ty,
+	class _Other = _Ty> inline
+	_Ty exchange(_Ty& _Val, _Other&& _New_val)
+	{	// assign _New_val to _Val, return previous _Val
+	_Ty _Old_val = _STD move(_Val);
+	_Val = _STD forward<_Other>(_New_val);
+	return (_Old_val);
+	}
+
+ #if _HAS_CPP17
+	// TEMPLATE FUNCTION as_const
+template<class _Ty>
+	_CONST_FUN add_const_t<_Ty>& as_const(_Ty& _Val) _NOEXCEPT
+	{	// get const reference to _Val
+	return (_Val);
+	}
+template<class _Ty>
+	void as_const(const _Ty&&) = delete;
+
+	// STRUCT in_place_t
+struct in_place_t
+	{	// indicates in-place construction
+	explicit in_place_t() = default;
+	};
+_INLINE_VAR _CONST_DATA in_place_t in_place {};
+template<class _Ty>
+	struct in_place_type_t
+	{	// indicates in-place construction by type _Ty
+	explicit in_place_type_t() = default;
+	};
+
+template<class _Ty>
+	_INLINE_VAR _CONST_DATA in_place_type_t<_Ty> in_place_type {};
+template<size_t _Idx>
+	struct in_place_index_t
+	{	// indicates in-place construction by size _Idx
+	explicit in_place_index_t() = default;
+	};
+
+template<size_t _Idx>
+	_INLINE_VAR _CONST_DATA in_place_index_t<_Idx> in_place_index {};
+ #endif /* _HAS_CPP17 */
+_STD_END
+
+ #if _HAS_TR1_IMPORTS
+_STD_BEGIN
+namespace tr1 {	// TR1 additions
+using _STD get;
+using _STD tuple_element;
+using _STD tuple_size;
+}	// namespace tr1
+_STD_END
+ #endif /* _HAS_TR1_IMPORTS */
+
+#endif /* _UTILITY_ */
+
+/*
+ * Copyright (c) by P.J. Plauger. All rights reserved.
+ * Consult your license regarding permissions and restrictions.
+ * V8.05/17:1422 */

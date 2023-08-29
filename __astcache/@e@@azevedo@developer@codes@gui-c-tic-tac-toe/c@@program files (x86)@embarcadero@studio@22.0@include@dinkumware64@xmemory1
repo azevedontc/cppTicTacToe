@@ -1,0 +1,344 @@
+﻿// memory_resource internal header
+#ifndef _XMEMORY1_
+#define _XMEMORY1_
+
+#include <new>
+#include <utility>
+
+_STD_BEGIN
+template<class... _Types>
+	class tuple;
+template<class... _Types> inline
+	_CONST_FUN tuple<_Types&&...>
+		forward_as_tuple(_Types&&... _Args) _NOEXCEPT;
+
+static _CONST_DATA size_t _Max_align = alignof(max_align_t);
+
+	namespace pmr {
+inline size_t _Roundup(size_t _Bytes)
+	{	// make a multiple of _Max_align
+	const size_t _Offset = _Bytes & (_Max_align - 1);
+	if (_Offset != 0)
+		_Bytes += _Max_align - _Offset;
+	return (_Bytes);
+	}
+
+	// CLASS memory_resource
+class memory_resource
+	{	// abstract interface to memory resource
+	static _CONST_DATA size_t max_align = _Max_align;
+
+public:
+	memory_resource()
+		{	// default construct
+		}
+
+	virtual ~memory_resource() _NOEXCEPT
+		{	// delete the object
+		}
+
+	void *allocate(size_t _Bytes, size_t _Bound = _Max_align)
+		{	// allocate _Bytes bytes with alignment _Bound
+		return (do_allocate(_Bytes, _Bound));
+		}
+
+	void deallocate(void *_Ptr, size_t _Bytes, size_t _Bound = _Max_align)
+		{	// deallocate _Bytes bytes with alignment _Bound at _Ptr
+		do_deallocate(_Ptr, _Bytes, _Bound);
+		}
+
+	bool is_equal(
+		const memory_resource& _Other) const _NOEXCEPT
+		{	// test if *this == _Other
+		return (do_is_equal(_Other));
+		}
+
+protected:
+	virtual void *do_allocate(size_t _Bytes, size_t _Bound) = 0;
+	virtual void do_deallocate(void *_Ptr, size_t _Bytes, size_t _Bound) = 0;
+
+	virtual bool do_is_equal(
+		const memory_resource& _Other) const _NOEXCEPT = 0;
+	};
+
+inline bool operator==(const memory_resource& _Left,
+	const memory_resource& _Right) _NOEXCEPT
+	{	// test if _Left == _Right
+	return (&_Left == &_Right || _Left.is_equal(_Right));
+	}
+
+inline bool operator!=(const memory_resource& _Left,
+	const memory_resource& _Right) _NOEXCEPT
+	{	// test if _Left != _Right
+	return (!(_Left == _Right));
+	}
+
+	// FORWARD REFERENCES
+memory_resource *new_delete_resource() _NOEXCEPT;
+memory_resource *null_memory_resource() _NOEXCEPT;
+
+memory_resource *set_default_resource(memory_resource *_Res) _NOEXCEPT;
+memory_resource *get_default_resource() _NOEXCEPT;
+
+	// TEMPLATE CLASS polymorphic_allocator
+template<class _Ty>
+	class polymorphic_allocator
+		: public allocator<_Ty>
+	{	// front for different allocation strategies
+public:
+	template<class _Other>
+		struct rebind
+		{	// convert this type to allocator<_Other>
+		typedef polymorphic_allocator<_Other> other;
+		};
+
+	polymorphic_allocator() _NOEXCEPT
+		: _Mresource(get_default_resource())
+		{	// default construct
+		}
+
+	polymorphic_allocator(nullptr_t) _NOEXCEPT
+		: _Mresource(get_default_resource())
+		{	// construct from null pointer
+		}
+
+	polymorphic_allocator(void *) _NOEXCEPT
+		: _Mresource(get_default_resource())
+		{	// construct from null pointer
+		}
+
+	polymorphic_allocator(memory_resource *_Upstream)
+		: _Mresource(_Upstream == nullptr
+			? get_default_resource() : _Upstream)
+		{	// construct from memory_resource
+		}
+
+	polymorphic_allocator(const polymorphic_allocator&) = default;
+
+	template<class _Other>
+		polymorphic_allocator(
+			const polymorphic_allocator<_Other>& _Right) _NOEXCEPT
+		: _Mresource(_Right.resource())
+		{	// construct from a related allocator
+		}
+
+	polymorphic_allocator& operator=(
+		const polymorphic_allocator&) = default;
+
+	template<class _Other>
+		polymorphic_allocator<_Ty>& operator=(
+			const polymorphic_allocator<_Other>& _Right)
+		{	// assign from a related allocator
+		_Mresource = _Right.upstream_resource();
+		return (*this);
+		}
+
+	_Ty *allocate(size_t _Bytes, const void * = 0)
+		{	// allocate storage
+		return (static_cast<_Ty *>(_Mresource->allocate(
+			_Bytes * sizeof (_Ty), alignof(_Ty))));
+		}
+
+	void deallocate(void *_Ptr, size_t _Bytes)
+		{	// deallocate storage
+		_Mresource->deallocate(_Ptr,
+			_Bytes * sizeof (_Ty), alignof(_Ty));
+		}
+
+	template<class _Objty,
+		class... _Types>
+		void construct(_Objty *_Ptr, _Types&&... _Args)
+		{	// construct _Objty(_Types...) at _Ptr
+		::new ((void *)_Ptr) _Objty(_STD forward<_Types>(_Args)...);
+		}
+
+	template<class _Ty1,
+		class _Ty2,
+		class... _Types1,
+		class... _Types2>
+		void construct(pair<_Ty1, _Ty2> *_Ptr, piecewise_construct_t,
+			tuple<_Types1...> _First, tuple<_Types2...> _Second)
+		{	// construct pair by uses-allocator construction
+		::new ((void *)_Ptr) pair<_Ty1, _Ty2>(piecewise_construct,
+			_STD forward<tuple<_Types1...> >(_First),
+			_STD forward<tuple<_Types2...> >(_Second));
+		}
+
+	template<class _Ty1,
+		class _Ty2>
+		void construct(pair<_Ty1, _Ty2> *_Ptr)
+		{	// construct an empty pair
+		::new ((void *)_Ptr) pair<_Ty1, _Ty2>();
+		}
+
+	template<class _Ty1,
+		class _Ty2,
+		class _U1,
+		class _U2>
+		void construct(pair<_Ty1, _Ty2> *_Ptr,
+			_U1&& _First, _U2&& _Second)
+		{	// construct by moving members
+		this->construct(_Ptr, piecewise_construct,
+			_STD forward_as_tuple(_STD forward<_U1>(_First)),
+			_STD forward_as_tuple(_STD forward<_U2>(_Second)));
+		}
+
+	template<class _Ty1,
+		class _Ty2,
+		class _U1,
+		class _U2>
+		void construct(pair<_Ty1, _Ty2> *_Ptr,
+			const _STD pair<_U1, _U2>& _Pair)
+		{	// construct by copying members of _Pair
+		this->construct(_Ptr, piecewise_construct,
+			_STD forward_as_tuple(_Pair.first),
+			_STD forward_as_tuple(_Pair.second));
+		}
+
+	template<class _Ty1,
+		class _Ty2,
+		class _U1,
+		class _U2>
+		void construct(pair<_Ty1, _Ty2> *_Ptr,
+			_STD pair<_U1, _U2>&& _Pair)
+		{	// construct by moving members of _Pair
+		this->construct(_Ptr, piecewise_construct,
+			_STD forward_as_tuple(_STD forward<_U1>(_Pair.first)),
+			_STD forward_as_tuple(_STD forward<_U2>(_Pair.second)));
+		}
+
+	template<class _Other>
+		void destroy(_Other *_Ptr)
+		{	// call destructor for *_Ptr
+		_Ptr->~_Other();
+		}
+
+	polymorphic_allocator select_on_container_copy_construction() const
+		{	// get a copy of this allocator
+		return (polymorphic_allocator());
+		}
+
+	memory_resource *resource() const
+		{	// get memory resource
+		return (_Mresource);
+		}
+private:
+	memory_resource *_Mresource;
+	};
+
+template<class _Ty1,
+	class _Ty2>
+bool operator==(const polymorphic_allocator<_Ty1>& _Left,
+	const polymorphic_allocator<_Ty2>& _Right) _NOEXCEPT
+	{	// test for equality
+	return (*_Left.resource() == *_Right.resource());
+	}
+
+template<class _Ty1,
+	class _Ty2>
+bool operator!=(const polymorphic_allocator<_Ty1>& _Left,
+	const polymorphic_allocator<_Ty2>& _Right) _NOEXCEPT
+	{	// test for equality
+	return (!(_Left == _Right));
+	}
+
+	// FUNCTION new_delete_resource
+struct _New_del_resource
+	: public memory_resource
+	{	// simple memory_resource using operator new/delete
+	_New_del_resource()
+		{	// default construct
+		}
+
+	virtual ~_New_del_resource() _NOEXCEPT
+		{	// destroy the object
+		}
+
+protected:
+	virtual void *do_allocate(size_t _Bytes, size_t _Bound)
+		{	// allocate memory
+		_Lockit _Lock(_LOCK_MALLOC);
+		void * _Ptr = ::operator new(_Bytes);
+		return (_Ptr);
+		}
+
+	virtual void do_deallocate(void *_Ptr, size_t, size_t)
+		{	// free allocated memory
+		_Lockit _Lock(_LOCK_MALLOC);
+		::operator delete(_Ptr);
+		}
+
+	virtual bool do_is_equal(
+		const memory_resource& _Other) const _NOEXCEPT
+		{	// test for equality
+		return (this ==
+			dynamic_cast<const memory_resource *>(&_Other));
+		}
+	};
+
+inline memory_resource *new_delete_resource() _NOEXCEPT
+	{	// get pointer to new/delete memory_resource
+	static _New_del_resource _Myresource;
+	return ((memory_resource *)&_Myresource);
+	}
+
+	// FUNCTION null_memory_resource
+struct _Null_mem_resource
+	: public memory_resource
+	{	// dummy memory_resource
+	_Null_mem_resource()
+		{	// default construct
+		}
+
+	virtual ~_Null_mem_resource() _NOEXCEPT
+		{	// destroy the object
+		}
+
+protected:
+	virtual void *do_allocate(size_t, size_t)
+		{	// always throw
+		_THROW_N(_XSTD bad_alloc, "null_memory_resource::allocate called");
+		}
+
+	virtual void do_deallocate(void *, size_t, size_t)
+		{	// do nothing
+		}
+
+	virtual bool do_is_equal(
+		const memory_resource& _Other) const _NOEXCEPT
+		{	// test for equality
+		return (this ==
+			dynamic_cast<const memory_resource *>(&_Other));
+		}
+	};
+
+inline memory_resource *null_memory_resource() _NOEXCEPT
+	{	// get pointer to null memory_resource
+	static _Null_mem_resource _Myresource;
+	return ((memory_resource *)&_Myresource);
+	}
+
+//	FUNCTIONS get/set_default_resource
+static memory_resource *_Def_mem_resource = new_delete_resource();
+
+inline memory_resource *get_default_resource() _NOEXCEPT
+	{	// get default memory_resource pointer
+	_Lockit _Lock(_LOCK_LOCALE);
+	return (_Def_mem_resource);
+	}
+
+inline memory_resource *set_default_resource(memory_resource *_New) _NOEXCEPT
+	{	// set new default memory_resource pointer
+	_Lockit _Lock(_LOCK_LOCALE);
+	memory_resource *_Old = _Def_mem_resource;
+	_Def_mem_resource = _New;
+	return (_Old);
+	}
+	}	// namespace pmr
+_STD_END
+#endif /* _XMEMORY1 */
+
+/*
+ * Copyright (c) by P.J. Plauger. All rights reserved.
+ * Consult your license regarding permissions and restrictions.
+ * V8.05/17:1422 */
