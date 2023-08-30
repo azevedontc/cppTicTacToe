@@ -2,7 +2,7 @@
 Tic Tac Toe developed in C++Builder / Jogo da Velha desenvolvido no C++Builder
 
 ## EN-US
-- Tic Tac Toe Game with C++ developed using C++ builder;
+- Tic Tac Toe Game with C++ developed using C++Builder;
 - The game lets two players play with each other X and O;
 - If one of the players wins the game print the winner message and two buttons will appear to make the user Play Again or Exit;
 - The score of two players is displayed on the top of the game;
